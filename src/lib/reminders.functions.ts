@@ -5,16 +5,18 @@ import type { Database } from '@/integrations/supabase/types'
 import { createKlaviyoClient } from './klaviyo.server'
 import { buildKlaviyoPayload } from './reminders.server'
 import { nextBirthday } from './dates.server'
+import { readSessionCookie } from './auth.server'
 
 const supabaseUrl = process.env.SUPABASE_URL!
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-const GetDashboardSchema = z.object({
-  customerId: z.string().uuid(),
-})
+function getSupabaseAdmin() {
+  return createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
+    auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+  })
+}
 
 const UpdateRemindersSchema = z.object({
-  customerId: z.string().uuid(),
   mumBirthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   remindsBirthday: z.boolean().optional(),
   remindsChristmas: z.boolean().optional(),
@@ -22,16 +24,19 @@ const UpdateRemindersSchema = z.object({
 })
 
 export const getDashboardData = createServerFn({ method: 'GET' })
-  .inputValidator((input: unknown) => GetDashboardSchema.parse(input))
-  .handler(async ({ data }) => {
-    const supabaseAdmin = createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
-      auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
-    })
+  .validator(() => true)
+  .handler(async () => {
+    const session = await readSessionCookie()
+    if (!session?.customerId) {
+      throw new Error('Unauthorized')
+    }
+
+    const supabaseAdmin = getSupabaseAdmin()
 
     const { data: customer, error: customerError } = await supabaseAdmin
       .from('reminder_customers')
       .select('*')
-      .eq('id', data.customerId)
+      .eq('id', session.customerId)
       .single()
 
     if (customerError || !customer) {
@@ -49,16 +54,19 @@ export const getDashboardData = createServerFn({ method: 'GET' })
   })
 
 export const updateReminders = createServerFn({ method: 'POST' })
-  .inputValidator((input: unknown) => UpdateRemindersSchema.parse(input))
+  .validator((input: unknown) => UpdateRemindersSchema.parse(input))
   .handler(async ({ data }) => {
-    const supabaseAdmin = createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
-      auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
-    })
+    const session = await readSessionCookie()
+    if (!session?.customerId) {
+      throw new Error('Unauthorized')
+    }
+
+    const supabaseAdmin = getSupabaseAdmin()
 
     const { data: customer, error: customerError } = await supabaseAdmin
       .from('reminder_customers')
       .select('*')
-      .eq('id', data.customerId)
+      .eq('id', session.customerId)
       .single()
 
     if (customerError || !customer) {
@@ -88,7 +96,7 @@ export const updateReminders = createServerFn({ method: 'POST' })
     for (const entry of reminderEntries) {
       if (entry.enabled === undefined && entry.date === undefined) continue
 
-      const existing = await supabaseAdmin
+      const { data: existing } = await supabaseAdmin
         .from('reminders')
         .select('*')
         .eq('customer_id', customer.id)
@@ -98,8 +106,8 @@ export const updateReminders = createServerFn({ method: 'POST' })
       const payload: Database['public']['Tables']['reminders']['Insert'] = {
         customer_id: customer.id,
         event_type: entry.eventType,
-        event_date: entry.date ?? existing.data?.event_date ?? null,
-        enabled: entry.enabled ?? existing.data?.enabled ?? true,
+        event_date: entry.date ?? existing?.event_date ?? null,
+        enabled: entry.enabled ?? existing?.enabled ?? true,
       }
 
       const { error: upsertError } = await supabaseAdmin
@@ -144,12 +152,9 @@ export const updateReminders = createServerFn({ method: 'POST' })
   })
 
 export const recomputeBirthdayNext = createServerFn({ method: 'POST' })
-  .inputValidator((input: unknown) => z.object({}).parse(input))
+  .validator(() => true)
   .handler(async () => {
-    const supabaseAdmin = createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
-      auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
-    })
-
+    const supabaseAdmin = getSupabaseAdmin()
     const klaviyo = createKlaviyoClient(supabaseAdmin)
 
     const { data: customers, error } = await supabaseAdmin
