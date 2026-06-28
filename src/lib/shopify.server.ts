@@ -1,4 +1,3 @@
-import { createHMAC, importSPKI } from 'jose'
 import { jwtVerify, SignJWT } from 'jose'
 
 const SHOPIFY_APP_API_KEY = process.env.SHOPIFY_APP_API_KEY
