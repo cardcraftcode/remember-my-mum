@@ -10,11 +10,17 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthShopifyRouteImport } from './routes/auth/shopify'
 import { Route as ApiPublicShopifyRemindersRouteImport } from './routes/api/public/shopify/reminders'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthShopifyRoute = AuthShopifyRouteImport.update({
+  id: '/auth/shopify',
+  path: '/auth/shopify',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicShopifyRemindersRoute =
@@ -26,27 +32,31 @@ const ApiPublicShopifyRemindersRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth/shopify': typeof AuthShopifyRoute
   '/api/public/shopify/reminders': typeof ApiPublicShopifyRemindersRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth/shopify': typeof AuthShopifyRoute
   '/api/public/shopify/reminders': typeof ApiPublicShopifyRemindersRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/auth/shopify': typeof AuthShopifyRoute
   '/api/public/shopify/reminders': typeof ApiPublicShopifyRemindersRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/public/shopify/reminders'
+  fullPaths: '/' | '/auth/shopify' | '/api/public/shopify/reminders'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/public/shopify/reminders'
-  id: '__root__' | '/' | '/api/public/shopify/reminders'
+  to: '/' | '/auth/shopify' | '/api/public/shopify/reminders'
+  id: '__root__' | '/' | '/auth/shopify' | '/api/public/shopify/reminders'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthShopifyRoute: typeof AuthShopifyRoute
   ApiPublicShopifyRemindersRoute: typeof ApiPublicShopifyRemindersRoute
 }
 
@@ -57,6 +67,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/shopify': {
+      id: '/auth/shopify'
+      path: '/auth/shopify'
+      fullPath: '/auth/shopify'
+      preLoaderRoute: typeof AuthShopifyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/shopify/reminders': {
@@ -71,6 +88,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthShopifyRoute: AuthShopifyRoute,
   ApiPublicShopifyRemindersRoute: ApiPublicShopifyRemindersRoute,
 }
 export const routeTree = rootRouteImport
