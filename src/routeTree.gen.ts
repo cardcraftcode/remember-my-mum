@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthShopifyRouteImport } from './routes/auth/shopify'
+import { Route as AuthShopifyCallbackRouteImport } from './routes/auth/shopify/callback'
 import { Route as ApiPublicShopifyRemindersRouteImport } from './routes/api/public/shopify/reminders'
 
 const IndexRoute = IndexRouteImport.update({
@@ -23,6 +24,11 @@ const AuthShopifyRoute = AuthShopifyRouteImport.update({
   path: '/auth/shopify',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthShopifyCallbackRoute = AuthShopifyCallbackRouteImport.update({
+  id: '/callback',
+  path: '/callback',
+  getParentRoute: () => AuthShopifyRoute,
+} as any)
 const ApiPublicShopifyRemindersRoute =
   ApiPublicShopifyRemindersRouteImport.update({
     id: '/api/public/shopify/reminders',
@@ -32,31 +38,47 @@ const ApiPublicShopifyRemindersRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/auth/shopify': typeof AuthShopifyRoute
+  '/auth/shopify': typeof AuthShopifyRouteWithChildren
+  '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
   '/api/public/shopify/reminders': typeof ApiPublicShopifyRemindersRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/auth/shopify': typeof AuthShopifyRoute
+  '/auth/shopify': typeof AuthShopifyRouteWithChildren
+  '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
   '/api/public/shopify/reminders': typeof ApiPublicShopifyRemindersRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/auth/shopify': typeof AuthShopifyRoute
+  '/auth/shopify': typeof AuthShopifyRouteWithChildren
+  '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
   '/api/public/shopify/reminders': typeof ApiPublicShopifyRemindersRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth/shopify' | '/api/public/shopify/reminders'
+  fullPaths:
+    | '/'
+    | '/auth/shopify'
+    | '/auth/shopify/callback'
+    | '/api/public/shopify/reminders'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth/shopify' | '/api/public/shopify/reminders'
-  id: '__root__' | '/' | '/auth/shopify' | '/api/public/shopify/reminders'
+  to:
+    | '/'
+    | '/auth/shopify'
+    | '/auth/shopify/callback'
+    | '/api/public/shopify/reminders'
+  id:
+    | '__root__'
+    | '/'
+    | '/auth/shopify'
+    | '/auth/shopify/callback'
+    | '/api/public/shopify/reminders'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AuthShopifyRoute: typeof AuthShopifyRoute
+  AuthShopifyRoute: typeof AuthShopifyRouteWithChildren
   ApiPublicShopifyRemindersRoute: typeof ApiPublicShopifyRemindersRoute
 }
 
@@ -76,6 +98,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthShopifyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/shopify/callback': {
+      id: '/auth/shopify/callback'
+      path: '/callback'
+      fullPath: '/auth/shopify/callback'
+      preLoaderRoute: typeof AuthShopifyCallbackRouteImport
+      parentRoute: typeof AuthShopifyRoute
+    }
     '/api/public/shopify/reminders': {
       id: '/api/public/shopify/reminders'
       path: '/api/public/shopify/reminders'
@@ -86,9 +115,21 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthShopifyRouteChildren {
+  AuthShopifyCallbackRoute: typeof AuthShopifyCallbackRoute
+}
+
+const AuthShopifyRouteChildren: AuthShopifyRouteChildren = {
+  AuthShopifyCallbackRoute: AuthShopifyCallbackRoute,
+}
+
+const AuthShopifyRouteWithChildren = AuthShopifyRoute._addFileChildren(
+  AuthShopifyRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AuthShopifyRoute: AuthShopifyRoute,
+  AuthShopifyRoute: AuthShopifyRouteWithChildren,
   ApiPublicShopifyRemindersRoute: ApiPublicShopifyRemindersRoute,
 }
 export const routeTree = rootRouteImport
