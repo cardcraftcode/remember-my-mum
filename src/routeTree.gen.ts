@@ -9,38 +9,101 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthShopifyRouteImport } from './routes/auth/shopify'
+import { Route as AuthShopifyCallbackRouteImport } from './routes/auth/shopify/callback'
+import { Route as ApiPublicShopifyRemindersRouteImport } from './routes/api/public/shopify/reminders'
 
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthShopifyRoute = AuthShopifyRouteImport.update({
+  id: '/auth/shopify',
+  path: '/auth/shopify',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthShopifyCallbackRoute = AuthShopifyCallbackRouteImport.update({
+  id: '/callback',
+  path: '/callback',
+  getParentRoute: () => AuthShopifyRoute,
+} as any)
+const ApiPublicShopifyRemindersRoute =
+  ApiPublicShopifyRemindersRouteImport.update({
+    id: '/api/public/shopify/reminders',
+    path: '/api/public/shopify/reminders',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/auth/shopify': typeof AuthShopifyRouteWithChildren
+  '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
+  '/api/public/shopify/reminders': typeof ApiPublicShopifyRemindersRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/auth/shopify': typeof AuthShopifyRouteWithChildren
+  '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
+  '/api/public/shopify/reminders': typeof ApiPublicShopifyRemindersRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/auth/shopify': typeof AuthShopifyRouteWithChildren
+  '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
+  '/api/public/shopify/reminders': typeof ApiPublicShopifyRemindersRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/auth/shopify'
+    | '/auth/shopify/callback'
+    | '/api/public/shopify/reminders'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/dashboard'
+    | '/auth/shopify'
+    | '/auth/shopify/callback'
+    | '/api/public/shopify/reminders'
+  id:
+    | '__root__'
+    | '/'
+    | '/dashboard'
+    | '/auth/shopify'
+    | '/auth/shopify/callback'
+    | '/api/public/shopify/reminders'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DashboardRoute: typeof DashboardRoute
+  AuthShopifyRoute: typeof AuthShopifyRouteWithChildren
+  ApiPublicShopifyRemindersRoute: typeof ApiPublicShopifyRemindersRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,22 +111,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/shopify': {
+      id: '/auth/shopify'
+      path: '/auth/shopify'
+      fullPath: '/auth/shopify'
+      preLoaderRoute: typeof AuthShopifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/shopify/callback': {
+      id: '/auth/shopify/callback'
+      path: '/callback'
+      fullPath: '/auth/shopify/callback'
+      preLoaderRoute: typeof AuthShopifyCallbackRouteImport
+      parentRoute: typeof AuthShopifyRoute
+    }
+    '/api/public/shopify/reminders': {
+      id: '/api/public/shopify/reminders'
+      path: '/api/public/shopify/reminders'
+      fullPath: '/api/public/shopify/reminders'
+      preLoaderRoute: typeof ApiPublicShopifyRemindersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface AuthShopifyRouteChildren {
+  AuthShopifyCallbackRoute: typeof AuthShopifyCallbackRoute
+}
+
+const AuthShopifyRouteChildren: AuthShopifyRouteChildren = {
+  AuthShopifyCallbackRoute: AuthShopifyCallbackRoute,
+}
+
+const AuthShopifyRouteWithChildren = AuthShopifyRoute._addFileChildren(
+  AuthShopifyRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DashboardRoute: DashboardRoute,
+  AuthShopifyRoute: AuthShopifyRouteWithChildren,
+  ApiPublicShopifyRemindersRoute: ApiPublicShopifyRemindersRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
