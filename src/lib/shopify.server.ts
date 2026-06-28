@@ -38,8 +38,18 @@ export async function verifyShopifyWebhookSignature(
   secret: string,
 ): Promise<boolean> {
   if (!signature) return false
-  const hmac = createHMAC('SHA-256', new TextEncoder().encode(secret))
-  const mac = new Uint8Array(await hmac.sign(new TextEncoder().encode(body)))
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const mac = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(body),
+  )
   const expected = Buffer.from(mac).toString('base64')
   return signature === expected
 }
