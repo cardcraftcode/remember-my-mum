@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { Database } from '@/integrations/supabase/types'
+import type { Database, Json } from '@/integrations/supabase/types'
 
 const KLAVIYO_API_BASE = 'https://a.klaviyo.com/api'
 
