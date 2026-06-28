@@ -1,4 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
+import { getCookie, setCookie, deleteCookie } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/integrations/supabase/types'
@@ -7,6 +8,9 @@ import { verifyGuestToken } from './shopify.server'
 const supabaseUrl = process.env.SUPABASE_URL!
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const guestSecret = process.env.GUEST_TOKEN_SECRET || process.env.SHOPIFY_API_SECRET
+
+const SESSION_COOKIE = 'momcards_session'
+const OAUTH_COOKIE = 'momcards_oauth'
 
 const VerifyGuestTokenSchema = z.object({
   token: z.string().min(1),
@@ -24,6 +28,54 @@ function getSupabaseAdmin() {
   })
 }
 
+export type SessionPayload = {
+  customerId: string
+  email: string
+  shopifyCustomerId?: string | null
+}
+
+async function signSession(payload: SessionPayload): Promise<string> {
+  if (!guestSecret) throw new Error('Missing session secret')
+  const { SignJWT } = await import('jose')
+  return new SignJWT({ ...payload })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('7d')
+    .sign(new TextEncoder().encode(guestSecret))
+}
+
+export async function readSessionCookie(): Promise<SessionPayload | null> {
+  const token = getCookie(SESSION_COOKIE)
+  if (!token) return null
+  try {
+    if (!guestSecret) throw new Error('Missing session secret')
+    const { jwtVerify } = await import('jose')
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(guestSecret), {
+      algorithms: ['HS256'],
+    })
+    return {
+      customerId: payload.customerId as string,
+      email: payload.email as string,
+      shopifyCustomerId: payload.shopifyCustomerId as string | null | undefined,
+    }
+  } catch {
+    return null
+  }
+}
+
+export const getSession = createServerFn({ method: 'GET' })
+  .validator(() => true)
+  .handler(async () => {
+    return (await readSessionCookie()) ?? { customerId: null, email: null, shopifyCustomerId: null }
+  })
+
+export const logout = createServerFn({ method: 'POST' })
+  .validator(() => true)
+  .handler(async () => {
+    deleteCookie(SESSION_COOKIE)
+    return { success: true }
+  })
+
 export const verifyGuestDashboardToken = createServerFn({ method: 'POST' })
   .validator((input: unknown) => VerifyGuestTokenSchema.parse(input))
   .handler(async ({ data }) => {
@@ -31,7 +83,7 @@ export const verifyGuestDashboardToken = createServerFn({ method: 'POST' })
       throw new Error('Missing guest token secret')
     }
 
-    const { customerId, email, version } = await verifyGuestToken(data.token, guestSecret)
+    const { customerId, email } = await verifyGuestToken(data.token, guestSecret)
 
     const supabaseAdmin = getSupabaseAdmin()
     const { data: customer, error } = await supabaseAdmin
@@ -45,7 +97,48 @@ export const verifyGuestDashboardToken = createServerFn({ method: 'POST' })
       throw new Error('Customer not found')
     }
 
-    return { customerId, email, version }
+    const session = await signSession({
+      customerId: customer.id,
+      email: customer.email,
+      shopifyCustomerId: customer.shopify_customer_id,
+    })
+    setCookie(SESSION_COOKIE, session, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7,
+      path: '/',
+    })
+
+    return { customerId: customer.id, email: customer.email }
+  })
+
+export const createGuestDashboardLink = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => z.object({ customerId: z.string().uuid() }).parse(input))
+  .handler(async ({ data }) => {
+    if (!guestSecret) {
+      throw new Error('Missing guest token secret')
+    }
+
+    const supabaseAdmin = getSupabaseAdmin()
+    const { data: customer, error } = await supabaseAdmin
+      .from('reminder_customers')
+      .select('*')
+      .eq('id', data.customerId)
+      .single()
+
+    if (error || !customer) {
+      throw new Error('Customer not found')
+    }
+
+    const { signGuestToken } = await import('./shopify.server')
+    const token = await signGuestToken(
+      { customerId: customer.id, email: customer.email, version: 1 },
+      guestSecret,
+      '365d',
+    )
+
+    return { token }
   })
 
 export const exchangeShopifyAuthCode = createServerFn({ method: 'POST' })
@@ -54,6 +147,30 @@ export const exchangeShopifyAuthCode = createServerFn({ method: 'POST' })
     if (!process.env.SHOPIFY_APP_API_KEY || !process.env.SHOPIFY_API_SECRET) {
       throw new Error('Missing Shopify credentials')
     }
+
+    // Verify state from signed cookie
+    const oauthCookie = getCookie(OAUTH_COOKIE)
+    if (!oauthCookie) {
+      throw new Error('OAuth cookie missing or expired')
+    }
+
+    let oauthState: { state: string; code_verifier: string; origin: string; shopDomain: string }
+    try {
+      if (!guestSecret) throw new Error('Missing session secret')
+      const { jwtVerify } = await import('jose')
+      const { payload } = await jwtVerify(oauthCookie, new TextEncoder().encode(guestSecret), {
+        algorithms: ['HS256'],
+      })
+      oauthState = payload as typeof oauthState
+    } catch {
+      throw new Error('Invalid OAuth state cookie')
+    }
+
+    if (oauthState.state !== data.state || oauthState.shopDomain !== data.shopDomain) {
+      throw new Error('OAuth state mismatch')
+    }
+
+    deleteCookie(OAUTH_COOKIE)
 
     // Discover token endpoint
     const openidConfigRes = await fetch(
@@ -69,21 +186,6 @@ export const exchangeShopifyAuthCode = createServerFn({ method: 'POST' })
       token_endpoint: string
     }
 
-    // Look up stored verifier by state
-    const supabaseAdmin = getSupabaseAdmin()
-    const { data: verifier, error: verifierError } = await supabaseAdmin
-      .from('shopify_auth_states')
-      .select('*')
-      .eq('state', data.state)
-      .single()
-
-    if (verifierError || !verifier) {
-      throw new Error('Invalid or expired OAuth state')
-    }
-
-    // Delete verifier to prevent replay
-    await supabaseAdmin.from('shopify_auth_states').delete().eq('id', verifier.id)
-
     const tokenResponse = await fetch(openidConfig.token_endpoint, {
       method: 'POST',
       headers: {
@@ -96,9 +198,9 @@ export const exchangeShopifyAuthCode = createServerFn({ method: 'POST' })
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         client_id: process.env.SHOPIFY_APP_API_KEY,
-        redirect_uri: `${verifier.origin}/auth/shopify/callback`,
+        redirect_uri: `${oauthState.origin}/auth/shopify/callback`,
         code: data.code,
-        code_verifier: verifier.code_verifier,
+        code_verifier: oauthState.code_verifier,
       }).toString(),
     })
 
@@ -114,7 +216,6 @@ export const exchangeShopifyAuthCode = createServerFn({ method: 'POST' })
       refresh_token?: string
     }
 
-    // Extract email from id_token if available, otherwise call Customer Account API
     let email: string | null = null
     let shopifyCustomerId: string | null = null
 
@@ -130,7 +231,6 @@ export const exchangeShopifyAuthCode = createServerFn({ method: 'POST' })
     }
 
     if (!email) {
-      // Fallback: query Customer Account API
       const customerApiConfigRes = await fetch(
         `https://${data.shopDomain}/.well-known/customer-account-api`,
         { headers: { Accept: 'application/json' } },
@@ -180,7 +280,7 @@ export const exchangeShopifyAuthCode = createServerFn({ method: 'POST' })
       throw new Error('Could not retrieve customer email from Shopify')
     }
 
-    // Upsert customer record
+    const supabaseAdmin = getSupabaseAdmin()
     const { data: existing, error: findError } = await supabaseAdmin
       .from('reminder_customers')
       .select('*')
@@ -218,37 +318,22 @@ export const exchangeShopifyAuthCode = createServerFn({ method: 'POST' })
       customer = inserted
     }
 
+    const session = await signSession({
+      customerId: customer.id,
+      email: customer.email,
+      shopifyCustomerId: customer.shopify_customer_id,
+    })
+    setCookie(SESSION_COOKIE, session, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7,
+      path: '/',
+    })
+
     return {
       customerId: customer.id,
       email: customer.email,
       shopifyCustomerId: customer.shopify_customer_id,
     }
-  })
-
-export const createGuestDashboardLink = createServerFn({ method: 'POST' })
-  .validator((input: unknown) => z.object({ customerId: z.string().uuid() }).parse(input))
-  .handler(async ({ data }) => {
-    if (!guestSecret) {
-      throw new Error('Missing guest token secret')
-    }
-
-    const supabaseAdmin = getSupabaseAdmin()
-    const { data: customer, error } = await supabaseAdmin
-      .from('reminder_customers')
-      .select('*')
-      .eq('id', data.customerId)
-      .single()
-
-    if (error || !customer) {
-      throw new Error('Customer not found')
-    }
-
-    const { signGuestToken } = await import('./shopify.server')
-    const token = await signGuestToken(
-      { customerId: customer.id, email: customer.email, version: 1 },
-      guestSecret,
-      '365d',
-    )
-
-    return { token }
   })
