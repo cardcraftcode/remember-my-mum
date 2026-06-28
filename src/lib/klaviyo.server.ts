@@ -198,7 +198,7 @@ export class KlaviyoClient {
       customer_id: customerId,
       action,
       status,
-      payload: payload as Record<string, unknown>,
+      payload: payload as unknown as Json,
       error: error ?? null,
     })
   }
