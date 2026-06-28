@@ -14,7 +14,121 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      klaviyo_sync_log: {
+        Row: {
+          action: string
+          created_at: string
+          customer_id: string | null
+          error: string | null
+          id: string
+          payload: Json | null
+          status: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          customer_id?: string | null
+          error?: string | null
+          id?: string
+          payload?: Json | null
+          status: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          customer_id?: string | null
+          error?: string | null
+          id?: string
+          payload?: Json | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "klaviyo_sync_log_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "reminder_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reminder_customers: {
+        Row: {
+          auth_user_id: string | null
+          consent_timestamp: string | null
+          created_at: string
+          email: string
+          guest_token_version: number
+          id: string
+          klaviyo_profile_id: string | null
+          shop_domain: string | null
+          shopify_customer_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          auth_user_id?: string | null
+          consent_timestamp?: string | null
+          created_at?: string
+          email: string
+          guest_token_version?: number
+          id?: string
+          klaviyo_profile_id?: string | null
+          shop_domain?: string | null
+          shopify_customer_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          auth_user_id?: string | null
+          consent_timestamp?: string | null
+          created_at?: string
+          email?: string
+          guest_token_version?: number
+          id?: string
+          klaviyo_profile_id?: string | null
+          shop_domain?: string | null
+          shopify_customer_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      reminders: {
+        Row: {
+          created_at: string
+          customer_id: string
+          enabled: boolean
+          event_date: string | null
+          event_type: Database["public"]["Enums"]["reminder_event_type"]
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          enabled?: boolean
+          event_date?: string | null
+          event_type: Database["public"]["Enums"]["reminder_event_type"]
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          enabled?: boolean
+          event_date?: string | null
+          event_type?: Database["public"]["Enums"]["reminder_event_type"]
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reminders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "reminder_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +137,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      reminder_event_type: "birthday" | "christmas" | "mothers_day"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +264,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      reminder_event_type: ["birthday", "christmas", "mothers_day"],
+    },
   },
 } as const
