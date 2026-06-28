@@ -192,17 +192,6 @@ export class KlaviyoClient {
     action: string,
     status: 'success' | 'error',
     payload: Record<string, unknown> | null,
-    error?: string,
-  ) {
-    await this.supabase.from('klaviyo_sync_log').insert({
-      customer_id: customerId,
-      action,
-      status,
-      payload: payload ?? {},
-      error: error ?? null,
-    })
-  }
-}
 
 export function createKlaviyoClient(supabase: SupabaseClient<Database>) {
   const apiKey = process.env.KLAVIYO_PRIVATE_API_KEY
