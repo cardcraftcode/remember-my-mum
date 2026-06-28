@@ -1,5 +1,5 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
+import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getDashboardData, updateReminders } from '@/lib/reminders.functions'
 import { getSession, logout, verifyGuestDashboardToken } from '@/lib/auth.server'
@@ -14,10 +14,18 @@ export const Route = createFileRoute('/dashboard')({
 
 function DashboardPage() {
   const { session } = Route.useLoaderData()
+  const search = useSearch({ from: '/dashboard' })
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [guestError, setGuestError] = useState<string | null>(null)
   const [isGuestLoading, setIsGuestLoading] = useState(false)
+
+  useEffect(() => {
+    const token = (search as { token?: string }).token
+    if (token && !session?.customerId) {
+      handleGuestToken(token)
+    }
+  }, [search, session?.customerId])
 
   const { data: dashboardData, isLoading } = useQuery({
     queryKey: ['dashboard'],
@@ -28,6 +36,7 @@ function DashboardPage() {
     enabled: !!session?.customerId,
     retry: false,
   })
+
 
   const updateMutation = useMutation({
     mutationFn: updateReminders,
