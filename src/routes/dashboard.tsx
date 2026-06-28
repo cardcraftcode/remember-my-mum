@@ -69,6 +69,14 @@ function DashboardPage() {
           <p className="mb-6 text-gray-600">
             Sign in with your Shopify account to manage your Mum reminder preferences.
           </p>
+
+          {isGuestLoading && (
+            <p className="mb-4 text-sm text-gray-500">Signing you in from your email link...</p>
+          )}
+          {guestError && (
+            <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">{guestError}</p>
+          )}
+
           <a
             href="/auth/shopify"
             className="block w-full rounded-lg bg-pink-600 px-4 py-3 text-center font-medium text-white hover:bg-pink-700"
