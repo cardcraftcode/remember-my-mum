@@ -43,6 +43,6 @@ export const createGuestDashboardLink = createServerFn({ method: 'POST' })
 export const exchangeShopifyAuthCode = createServerFn({ method: 'POST' })
   .validator((input: unknown) => ExchangeShopifyAuthSchema.parse(input))
   .handler(async ({ data }) => {
-    const { exchangeShopifyAuth } = await import('./auth.server')
-    return exchangeShopifyAuth(data)
+    const { exchangeShopifyAuthCode: exchange } = await import('./auth.server')
+    return exchange(data)
   })

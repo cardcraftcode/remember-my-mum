@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getDashboardData, updateReminders } from '@/lib/reminders.functions'
-import { getSession, logout, verifyGuestDashboardToken } from '@/lib/auth.server'
+import { getSession, logout, verifyGuestDashboardToken } from '@/lib/auth'
 
 export const Route = createFileRoute('/dashboard')({
   component: DashboardPage,

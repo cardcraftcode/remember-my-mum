@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { exchangeShopifyAuthCode } from '@/lib/auth.server'
+import { exchangeShopifyAuthCode } from '@/lib/auth'
 
 export const Route = createFileRoute('/auth/shopify/callback')({
   server: {
@@ -21,8 +21,6 @@ export const Route = createFileRoute('/auth/shopify/callback')({
           return new Response('Missing authorization code or state', { status: 400 })
         }
 
-        // We need the shop domain to complete the exchange. Try to read it from a cookie first
-        // through the server function, or fall back to env if available.
         const shopDomain = process.env.SHOPIFY_SHOP_DOMAIN || ''
         if (!shopDomain) {
           return new Response(
