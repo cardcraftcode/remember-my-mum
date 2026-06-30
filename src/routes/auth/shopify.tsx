@@ -77,7 +77,7 @@ export const Route = createFileRoute('/auth/shopify')({
         authUrl.searchParams.set('client_id', process.env.SHOPIFY_APP_API_KEY)
         authUrl.searchParams.set('response_type', 'code')
         authUrl.searchParams.set('redirect_uri', redirectUri)
-        authUrl.searchParams.set('scope', 'openid email customer_read_customers')
+        authUrl.searchParams.set('scope', 'openid email customer-account-api:full')
         authUrl.searchParams.set('state', state)
         authUrl.searchParams.set('code_challenge', codeChallenge)
         authUrl.searchParams.set('code_challenge_method', 'S256')
