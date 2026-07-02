@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/integrations/supabase/types'
 import { createKlaviyoClient, type KlaviyoProfilePayload } from './klaviyo.server'
 import { nextBirthday } from './dates.server'
-import type { MumVariant } from './mum-variants'
+
 
 export type BirthdayEntry = {
   date: string // ISO YYYY-MM-DD
