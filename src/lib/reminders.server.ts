@@ -85,7 +85,9 @@ export async function upsertCustomerAndReminders(
       shopify_customer_id: input.shopifyCustomerId ?? null,
       auth_user_id: input.authUserId ?? null,
       consent_timestamp: consentTimestamp.toISOString(),
+      mum_variants: input.mumVariants ?? [],
     }
+
     const { data: inserted, error: insertError } = await supabaseAdmin
       .from('reminder_customers')
       .insert(insert)
