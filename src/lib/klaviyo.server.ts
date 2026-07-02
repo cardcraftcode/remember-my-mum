@@ -49,7 +49,7 @@ export class KlaviyoClient {
         Authorization: `Klaviyo-API-Key ${this.apiKey}`,
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        revision: '2023-02-24',
+        revision: '2024-10-15',
         ...options.headers,
       },
     })
