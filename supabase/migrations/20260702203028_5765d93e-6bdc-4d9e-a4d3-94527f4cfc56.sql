@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX reminders_customer_event_singleton_uidx ON public.reminders (customer_id, event_type) WHERE event_type <> 'birthday';
