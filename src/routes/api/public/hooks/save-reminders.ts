@@ -25,7 +25,9 @@ const bodySchema = z.object({
     mothers_day: z.boolean(),
   }),
   shop_domain: z.string().optional(),
+  mum_variants: z.array(z.enum([...MUM_VARIANTS] as [string, ...string[]])).optional(),
 })
+
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
