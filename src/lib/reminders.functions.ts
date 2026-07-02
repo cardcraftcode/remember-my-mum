@@ -89,9 +89,8 @@ export const updateReminders = createServerFn({ method: 'POST' })
       customer.mum_variants = data.mumVariants
     }
 
-
-
     const reminderEntries: Array<{
+
       eventType: Database['public']['Enums']['reminder_event_type']
       enabled?: boolean
       date?: string | null
