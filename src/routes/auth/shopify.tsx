@@ -34,14 +34,20 @@ export const Route = createFileRoute('/auth/shopify')({
         const origin = url.origin
         const redirectUri = `${origin}/auth/shopify/callback`
 
-        // Discover authorization endpoint
+        // Shopify Customer Account API OIDC discovery lives on the account subdomain.
+        const bareDomain = shopDomain.replace(/^https?:\/\//, '').replace(/^account\./, '')
+        const accountDomain = `account.${bareDomain}`
+
         const openidConfigRes = await fetch(
-          `https://${shopDomain}/.well-known/openid-configuration`,
+          `https://${accountDomain}/.well-known/openid-configuration`,
           { headers: { Accept: 'application/json' } },
         )
 
         if (!openidConfigRes.ok) {
-          return new Response('Failed to discover Shopify OpenID configuration', { status: 500 })
+          return new Response(
+            `Failed to discover Shopify OpenID configuration at ${accountDomain} (${openidConfigRes.status})`,
+            { status: 500 },
+          )
         }
 
         const openidConfig = (await openidConfigRes.json()) as {
