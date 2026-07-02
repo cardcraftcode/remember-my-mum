@@ -21,7 +21,9 @@ export type KlaviyoProfilePayload = {
   remindsChristmas?: boolean
   remindsMothersDay?: boolean
   consentTimestamp?: string | null
+  mumVariants?: string[]
 }
+
 
 export class KlaviyoClient {
   private apiKey: string
