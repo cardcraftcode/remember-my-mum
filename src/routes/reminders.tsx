@@ -169,10 +169,7 @@ function RemindersPage() {
                     key={index}
                     className="rounded-lg border border-gray-200 bg-pink-50/40 p-4"
                   >
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-gray-700">
-                        Birthday {index + 1}
-                      </p>
+                    <div className="flex items-center justify-end">
                       {birthdays.length > 1 && (
                         <button
                           type="button"
