@@ -83,7 +83,7 @@ export const Route = createFileRoute('/api/public/hooks/save-reminders')({
             remindsBirthday: reminders.birthday,
             remindsChristmas: reminders.christmas,
             remindsMothersDay: reminders.mothers_day,
-            mumVariants: mum_variants,
+            mumVariants: mum_variants as MumVariant[] | undefined,
           })
 
           return json(200, { ok: true, customer_id: result.customer.id })
