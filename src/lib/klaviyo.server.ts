@@ -9,6 +9,12 @@ type KlaviyoProfile = {
   properties?: Record<string, unknown>
 }
 
+export type KlaviyoBirthdayEntry = {
+  date: string
+  next: string
+  mumVariants: string[]
+}
+
 export type KlaviyoProfilePayload = {
   email: string
   firstName?: string
@@ -17,6 +23,7 @@ export type KlaviyoProfilePayload = {
   shopifyCustomerId?: string | null
   mumBirthday?: string | null
   mumBirthdayNext?: string | null
+  birthdays?: KlaviyoBirthdayEntry[]
   remindsBirthday?: boolean
   remindsChristmas?: boolean
   remindsMothersDay?: boolean
