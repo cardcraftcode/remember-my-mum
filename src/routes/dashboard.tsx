@@ -111,7 +111,9 @@ function DashboardPage() {
   }
 
   const { customer, reminders } = dashboardData
-  const birthday = reminders.find((r) => r.event_type === 'birthday')
+  const birthdayReminders = reminders
+    .filter((r) => r.event_type === 'birthday')
+    .sort((a, b) => (a.event_date ?? '').localeCompare(b.event_date ?? ''))
   const christmas = reminders.find((r) => r.event_type === 'christmas')
   const mothersDay = reminders.find((r) => r.event_type === 'mothers_day')
 
@@ -150,8 +152,7 @@ function DashboardPage() {
         )}
 
         <ReminderForm
-          customer={customer}
-          birthday={birthday}
+          birthdayReminders={birthdayReminders}
           christmas={christmas}
           mothersDay={mothersDay}
           onSubmit={(values) => updateMutation.mutate({ data: values })}
@@ -162,40 +163,72 @@ function DashboardPage() {
   )
 }
 
+type BirthdayFormEntry = {
+  date: string
+  mumVariants: string[]
+}
+
 type ReminderFormProps = {
-  customer: { email: string; mum_variants?: string[] | null }
-  birthday?: { event_date: string | null; enabled: boolean }
+  birthdayReminders: Array<{ event_date: string | null; mum_variants: string[] | null }>
   christmas?: { enabled: boolean }
   mothersDay?: { enabled: boolean }
   onSubmit: (values: {
-    mumBirthday: string | null
-    remindsBirthday: boolean
+    birthdays: BirthdayFormEntry[]
     remindsChristmas: boolean
     remindsMothersDay: boolean
-    mumVariants: string[]
   }) => void
   isSubmitting: boolean
 }
 
 
-function ReminderForm({ customer, birthday, christmas, mothersDay, onSubmit, isSubmitting }: ReminderFormProps) {
-  const [mumBirthday, setMumBirthday] = useState(birthday?.event_date ?? '')
-  const [remindsBirthday, setRemindsBirthday] = useState(birthday?.enabled ?? false)
+function ReminderForm({
+  birthdayReminders,
+  christmas,
+  mothersDay,
+  onSubmit,
+  isSubmitting,
+}: ReminderFormProps) {
+  const initialBirthdays: BirthdayFormEntry[] =
+    birthdayReminders.length > 0
+      ? birthdayReminders.map((r) => ({
+          date: r.event_date ?? '',
+          mumVariants: r.mum_variants ?? [],
+        }))
+      : []
+  const [remindsBirthday, setRemindsBirthday] = useState(initialBirthdays.length > 0)
+  const [birthdays, setBirthdays] = useState<BirthdayFormEntry[]>(
+    initialBirthdays.length > 0 ? initialBirthdays : [{ date: '', mumVariants: [] }],
+  )
   const [remindsChristmas, setRemindsChristmas] = useState(christmas?.enabled ?? false)
   const [remindsMothersDay, setRemindsMothersDay] = useState(mothersDay?.enabled ?? false)
-  const [mumVariants, setMumVariants] = useState<string[]>(customer.mum_variants ?? [])
 
+  const updateBirthday = (index: number, patch: Partial<BirthdayFormEntry>) => {
+    setBirthdays((prev) => prev.map((b, i) => (i === index ? { ...b, ...patch } : b)))
+  }
+
+  const toggleVariant = (index: number, variant: string, checked: boolean) => {
+    setBirthdays((prev) =>
+      prev.map((b, i) => {
+        if (i !== index) return b
+        const set = new Set(b.mumVariants)
+        if (checked) set.add(variant)
+        else set.delete(variant)
+        return { ...b, mumVariants: Array.from(set) }
+      }),
+    )
+  }
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault()
+        const payload = remindsBirthday
+          ? birthdays.filter((b) => !!b.date)
+          : []
         onSubmit({
-          mumBirthday: mumBirthday || null,
-          remindsBirthday,
+          birthdays: payload,
           remindsChristmas,
           remindsMothersDay,
-          mumVariants,
         })
       }}
       className="space-y-6 rounded-2xl bg-white p-6 shadow-sm"
@@ -208,23 +241,81 @@ function ReminderForm({ customer, birthday, christmas, mothersDay, onSubmit, isS
             onChange={(e) => setRemindsBirthday(e.target.checked)}
             className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
           />
-          <span className="text-gray-900">Remind me about Mum's birthday</span>
+          <span className="text-gray-900">Remind me about her birthday</span>
         </label>
+
         {remindsBirthday && (
-          <div className="mt-3 pl-8">
-            <label className="block text-sm font-medium text-gray-700">
-              Mum's birthday date
-            </label>
-            <input
-              type="date"
-              required={remindsBirthday}
-              value={mumBirthday}
-              onChange={(e) => setMumBirthday(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-pink-500 focus:outline-none focus:ring-pink-500"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              We'll send reminders 14 and 7 days before the date.
-            </p>
+          <div className="mt-4 space-y-4">
+            {birthdays.map((birthday, index) => (
+              <div
+                key={index}
+                className="rounded-lg border border-gray-200 bg-pink-50/40 p-4"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-gray-700">
+                    Birthday {index + 1}
+                  </p>
+                  {birthdays.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setBirthdays((prev) => prev.filter((_, i) => i !== index))
+                      }
+                      className="text-xs text-gray-500 hover:text-red-600"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Birthday date
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={birthday.date}
+                    onChange={(e) => updateBirthday(index, { date: e.target.value })}
+                    className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-pink-500 focus:outline-none focus:ring-pink-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    We'll send reminders 14 and 7 days before the date.
+                  </p>
+                </div>
+
+                <div className="mt-4">
+                  <p className="mb-2 text-sm font-medium text-gray-700">
+                    Who is this reminder for? (select all that apply)
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {MUM_VARIANTS.map((variant) => (
+                      <label key={variant} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={birthday.mumVariants.includes(variant)}
+                          onChange={(e) =>
+                            toggleVariant(index, variant, e.target.checked)
+                          }
+                          className="h-4 w-4 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                        />
+                        <span className="text-sm text-gray-900">{variant}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={() =>
+                setBirthdays((prev) => [...prev, { date: '', mumVariants: [] }])
+              }
+              className="w-full rounded-lg border border-dashed border-pink-400 px-4 py-2 text-sm font-medium text-pink-600 hover:bg-pink-50"
+            >
+              + Add another birthday
+            </button>
           </div>
         )}
       </div>
@@ -253,31 +344,6 @@ function ReminderForm({ customer, birthday, christmas, mothersDay, onSubmit, isS
         </label>
       </div>
 
-      <div>
-        <p className="mb-3 text-sm font-medium text-gray-700">
-          What do you call her? (select all that apply)
-        </p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {MUM_VARIANTS.map((variant) => (
-            <label key={variant} className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={mumVariants.includes(variant)}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    setMumVariants([...mumVariants, variant])
-                  } else {
-                    setMumVariants(mumVariants.filter((v) => v !== variant))
-                  }
-                }}
-                className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-              />
-              <span className="text-gray-900">{variant}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
       <button
         type="submit"
         disabled={isSubmitting}
@@ -285,7 +351,7 @@ function ReminderForm({ customer, birthday, christmas, mothersDay, onSubmit, isS
       >
         {isSubmitting ? 'Saving...' : 'Save reminders'}
       </button>
-
     </form>
   )
 }
+
