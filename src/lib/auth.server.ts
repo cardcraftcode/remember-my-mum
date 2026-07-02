@@ -3,7 +3,11 @@ import { getCookie, setCookie, deleteCookie } from '@tanstack/react-start/server
 import { z } from 'zod'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/integrations/supabase/types'
-import { verifyGuestToken } from './shopify.server'
+import {
+  getShopifyCustomerAccountDomain,
+  shopifyCustomerAccountFetchHeaders,
+  verifyGuestToken,
+} from './shopify.server'
 
 const supabaseUrl = process.env.SUPABASE_URL!
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -144,15 +148,21 @@ export async function exchangeShopifyAuthCode(data: {
     throw new Error('Invalid OAuth state cookie')
   }
 
-  if (oauthState.state !== data.state || oauthState.shopDomain !== data.shopDomain) {
+  const shopDomain = getShopifyCustomerAccountDomain(data.shopDomain)
+
+  if (!shopDomain) {
+    throw new Error('Missing Shopify customer account domain')
+  }
+
+  if (oauthState.state !== data.state || oauthState.shopDomain !== shopDomain) {
     throw new Error('OAuth state mismatch')
   }
 
   deleteCookie(OAUTH_COOKIE)
 
   const openidConfigRes = await fetch(
-    `https://${data.shopDomain}/.well-known/openid-configuration`,
-    { headers: { Accept: 'application/json' } },
+    `https://${shopDomain}/.well-known/openid-configuration`,
+    { headers: shopifyCustomerAccountFetchHeaders() },
   )
 
   if (!openidConfigRes.ok) {
@@ -209,8 +219,8 @@ export async function exchangeShopifyAuthCode(data: {
 
   if (!email) {
     const customerApiConfigRes = await fetch(
-      `https://${data.shopDomain}/.well-known/customer-account-api`,
-      { headers: { Accept: 'application/json' } },
+      `https://${shopDomain}/.well-known/customer-account-api`,
+      { headers: shopifyCustomerAccountFetchHeaders() },
     )
     if (!customerApiConfigRes.ok) {
       throw new Error('Failed to discover Customer Account API configuration')

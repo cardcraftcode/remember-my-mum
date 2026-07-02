@@ -3,6 +3,40 @@ import { jwtVerify, SignJWT } from 'jose'
 const SHOPIFY_APP_API_KEY = process.env.SHOPIFY_APP_API_KEY
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET
 
+const SHOPIFY_CUSTOMER_AUTH_USER_AGENT =
+  'Mom Cards Customer Account OAuth (https://momcards.co.uk)'
+
+export function normalizeShopifyDomain(domain: string): string {
+  return domain
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '')
+    .toLowerCase()
+}
+
+export function getShopifyCustomerAccountDomain(candidate?: string | null): string {
+  const domain = normalizeShopifyDomain(
+    process.env.SHOPIFY_CUSTOMER_ACCOUNT_DOMAIN ||
+      process.env.SHOPIFY_STOREFRONT_DOMAIN ||
+      process.env.SHOPIFY_SHOP_DOMAIN ||
+      candidate ||
+      '',
+  )
+
+  if (!domain || domain.endsWith('.myshopify.com')) {
+    return ''
+  }
+
+  return domain
+}
+
+export function shopifyCustomerAccountFetchHeaders(): HeadersInit {
+  return {
+    Accept: 'application/json',
+    'User-Agent': SHOPIFY_CUSTOMER_AUTH_USER_AGENT,
+  }
+}
+
 export type ShopifySessionClaims = {
   iss: string
   sub?: string
