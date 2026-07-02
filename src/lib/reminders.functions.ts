@@ -6,6 +6,8 @@ import { createKlaviyoClient } from './klaviyo.server'
 import { buildKlaviyoPayload } from './reminders.server'
 import { nextBirthday } from './dates.server'
 import { readSessionCookie } from './auth.server'
+import { MUM_VARIANTS, type MumVariant } from './mum-variants'
+
 
 const supabaseUrl = process.env.SUPABASE_URL!
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
