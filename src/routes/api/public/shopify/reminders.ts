@@ -111,13 +111,22 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
             return new Response('Forbidden', { status: 403 })
           }
 
+          // Derive canonical birthday list from either the new or legacy shape.
+          let birthdayInput: Array<{ date: string; mumVariants: string[] }> = []
+          if (payload.remindsBirthday === false) {
+            birthdayInput = []
+          } else if (payload.birthdays && payload.birthdays.length > 0) {
+            birthdayInput = payload.birthdays
+          } else if (payload.mumBirthday) {
+            birthdayInput = [{ date: payload.mumBirthday, mumVariants: [] }]
+          }
+
           const result = await upsertCustomerAndReminders({
             email: payload.email,
             shopDomain: payload.shopDomain,
             // Always derive from the verified token, never trust the client.
             shopifyCustomerId: tokenCustomerId,
-            mumBirthday: payload.mumBirthday ?? null,
-            remindsBirthday: payload.remindsBirthday ?? false,
+            birthdays: birthdayInput,
             remindsChristmas: payload.remindsChristmas ?? false,
             remindsMothersDay: payload.remindsMothersDay ?? false,
             consentTimestamp: new Date(),
