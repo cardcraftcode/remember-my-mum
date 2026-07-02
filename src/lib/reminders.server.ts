@@ -60,7 +60,7 @@ export async function upsertCustomerAndReminders(
 
   const now = new Date()
   const consentTimestamp = input.consentTimestamp ?? now
-  const aggregatedVariants = unionVariants(input.birthdays)
+
 
   let customer: Database['public']['Tables']['reminder_customers']['Row']
 
