@@ -227,6 +227,5 @@ export function buildKlaviyoPayload(
     remindsChristmas: christmasReminder?.enabled ?? false,
     remindsMothersDay: mothersDayReminder?.enabled ?? false,
     consentTimestamp: customer.consent_timestamp,
-    mumVariants: (customer.mum_variants ?? []) as string[],
   }
 }
