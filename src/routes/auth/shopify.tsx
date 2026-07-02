@@ -21,12 +21,12 @@ export const Route = createFileRoute('/auth/shopify')({
         }
 
         const url = new URL(request.url)
-        const shopDomain =
-          process.env.SHOPIFY_SHOP_DOMAIN || url.searchParams.get('shop_domain') || ''
+        const shopId =
+          process.env.SHOPIFY_SHOP_ID || url.searchParams.get('shop_id') || ''
 
-        if (!shopDomain) {
+        if (!shopId || !/^\d+$/.test(shopId)) {
           return new Response(
-            'Missing Shopify shop domain. Set SHOPIFY_SHOP_DOMAIN or provide ?shop_domain=',
+            'Missing or invalid Shopify shop ID. Set SHOPIFY_SHOP_ID (numeric) or provide ?shop_id=',
             { status: 400 },
           )
         }
@@ -34,18 +34,16 @@ export const Route = createFileRoute('/auth/shopify')({
         const origin = url.origin
         const redirectUri = `${origin}/auth/shopify/callback`
 
-        // Shopify Customer Account API OIDC discovery lives on the account subdomain.
-        const bareDomain = shopDomain.replace(/^https?:\/\//, '').replace(/^account\./, '')
-        const accountDomain = `account.${bareDomain}`
+        // Shopify Customer Account API OIDC discovery lives at shopify.com/authentication/{shop_id}
+        const discoveryUrl = `https://shopify.com/authentication/${shopId}/.well-known/openid-configuration`
 
-        const openidConfigRes = await fetch(
-          `https://${accountDomain}/.well-known/openid-configuration`,
-          { headers: { Accept: 'application/json' } },
-        )
+        const openidConfigRes = await fetch(discoveryUrl, {
+          headers: { Accept: 'application/json' },
+        })
 
         if (!openidConfigRes.ok) {
           return new Response(
-            `Failed to discover Shopify OpenID configuration at ${accountDomain} (${openidConfigRes.status})`,
+            `Failed to discover Shopify OpenID configuration at ${discoveryUrl} (${openidConfigRes.status})`,
             { status: 500 },
           )
         }
@@ -64,7 +62,7 @@ export const Route = createFileRoute('/auth/shopify')({
           state,
           code_verifier: codeVerifier,
           origin,
-          shopDomain,
+          shopId,
         })
           .setProtectedHeader({ alg: 'HS256' })
           .setIssuedAt()
