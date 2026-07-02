@@ -163,7 +163,7 @@ function DashboardPage() {
 }
 
 type ReminderFormProps = {
-  customer: { email: string }
+  customer: { email: string; mum_variants?: string[] | null }
   birthday?: { event_date: string | null; enabled: boolean }
   christmas?: { enabled: boolean }
   mothersDay?: { enabled: boolean }
@@ -172,9 +172,11 @@ type ReminderFormProps = {
     remindsBirthday: boolean
     remindsChristmas: boolean
     remindsMothersDay: boolean
+    mumVariants: string[]
   }) => void
   isSubmitting: boolean
 }
+
 
 function ReminderForm({ birthday, christmas, mothersDay, onSubmit, isSubmitting }: ReminderFormProps) {
   const [mumBirthday, setMumBirthday] = useState(birthday?.event_date ?? '')
