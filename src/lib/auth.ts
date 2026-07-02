@@ -33,12 +33,12 @@ export const verifyGuestDashboardToken = createServerFn({ method: 'POST' })
     return verifyGuestAndSignSession(data.token)
   })
 
-export const createGuestDashboardLink = createServerFn({ method: 'POST' })
-  .validator((input: unknown) => z.object({ customerId: z.string().uuid() }).parse(input))
-  .handler(async ({ data }) => {
-    const { createGuestToken } = await import('./auth.server')
-    return createGuestToken(data.customerId)
-  })
+// createGuestDashboardLink is deliberately not exported as a server function.
+// It would be a public HTTP endpoint that hands out a session token for any
+// customer UUID. If you need to generate a login link, call createGuestToken()
+// from trusted server-side code (webhook, cron) and email the resulting link
+// to the customer.
+
 
 export const exchangeShopifyAuthCode = createServerFn({ method: 'POST' })
   .validator((input: unknown) => ExchangeShopifyAuthSchema.parse(input))
