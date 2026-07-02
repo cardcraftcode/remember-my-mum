@@ -72,7 +72,7 @@ export async function upsertCustomerAndReminders(
     if (input.shopDomain) update.shop_domain = input.shopDomain
     if (input.shopifyCustomerId) update.shopify_customer_id = input.shopifyCustomerId
     if (input.authUserId) update.auth_user_id = input.authUserId
-    if (input.birthdays !== undefined) update.mum_variants = aggregatedVariants
+
 
     const { data: updated, error: updateError } = await supabaseAdmin
       .from('reminder_customers')
