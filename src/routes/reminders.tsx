@@ -59,8 +59,10 @@ function RemindersPage() {
             mothers_day: remindsMothersDay,
           },
           shop_domain: 'momcards.co.uk',
+          mum_variants: mumVariants,
         }),
       })
+
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
