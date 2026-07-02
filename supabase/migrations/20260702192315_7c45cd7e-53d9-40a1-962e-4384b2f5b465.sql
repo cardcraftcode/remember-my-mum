@@ -1,0 +1,1 @@
+ALTER TABLE public.reminder_customers DROP COLUMN IF EXISTS mum_variants;

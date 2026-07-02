@@ -27,12 +27,8 @@ export type CustomerWithReminders = {
   reminders: Database['public']['Tables']['reminders']['Row'][]
 }
 
-function unionVariants(birthdays: BirthdayEntry[] | undefined): string[] {
-  if (!birthdays) return []
-  const set = new Set<string>()
-  for (const b of birthdays) for (const v of b.mumVariants) set.add(v)
-  return Array.from(set)
-}
+
+
 
 export async function upsertCustomerAndReminders(
   input: UpsertReminderInput,
@@ -64,7 +60,7 @@ export async function upsertCustomerAndReminders(
 
   const now = new Date()
   const consentTimestamp = input.consentTimestamp ?? now
-  const aggregatedVariants = unionVariants(input.birthdays)
+
 
   let customer: Database['public']['Tables']['reminder_customers']['Row']
 
@@ -76,7 +72,7 @@ export async function upsertCustomerAndReminders(
     if (input.shopDomain) update.shop_domain = input.shopDomain
     if (input.shopifyCustomerId) update.shopify_customer_id = input.shopifyCustomerId
     if (input.authUserId) update.auth_user_id = input.authUserId
-    if (input.birthdays !== undefined) update.mum_variants = aggregatedVariants
+
 
     const { data: updated, error: updateError } = await supabaseAdmin
       .from('reminder_customers')
@@ -94,7 +90,6 @@ export async function upsertCustomerAndReminders(
       shopify_customer_id: input.shopifyCustomerId ?? null,
       auth_user_id: input.authUserId ?? null,
       consent_timestamp: consentTimestamp.toISOString(),
-      mum_variants: aggregatedVariants,
     }
 
     const { data: inserted, error: insertError } = await supabaseAdmin
@@ -232,6 +227,5 @@ export function buildKlaviyoPayload(
     remindsChristmas: christmasReminder?.enabled ?? false,
     remindsMothersDay: mothersDayReminder?.enabled ?? false,
     consentTimestamp: customer.consent_timestamp,
-    mumVariants: (customer.mum_variants ?? []) as string[],
   }
 }

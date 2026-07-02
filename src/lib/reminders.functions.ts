@@ -84,22 +84,9 @@ export const updateReminders = createServerFn({ method: 'POST' })
       throw new Error('Customer not found')
     }
 
-    // Aggregate mum_variants union across all birthdays onto the customer row
-    // (kept for backward compatibility with existing Klaviyo segments).
     if (data.birthdays !== undefined) {
-      const set = new Set<string>()
-      for (const b of data.birthdays) for (const v of b.mumVariants) set.add(v)
-      const aggregated = Array.from(set)
-
-      const { error: variantUpdateError } = await supabaseAdmin
-        .from('reminder_customers')
-        .update({ mum_variants: aggregated, updated_at: new Date().toISOString() })
-        .eq('id', customer.id)
-
-      if (variantUpdateError) throw variantUpdateError
-      customer.mum_variants = aggregated
-
       // Replace all birthday reminders.
+
       const { error: deleteError } = await supabaseAdmin
         .from('reminders')
         .delete()

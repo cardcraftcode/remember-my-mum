@@ -28,8 +28,8 @@ export type KlaviyoProfilePayload = {
   remindsChristmas?: boolean
   remindsMothersDay?: boolean
   consentTimestamp?: string | null
-  mumVariants?: string[]
 }
+
 
 
 export class KlaviyoClient {
@@ -107,10 +107,8 @@ export class KlaviyoClient {
       ;(attributes.properties as Record<string, unknown>).consent_timestamp =
         payload.consentTimestamp
     }
-    if (payload.mumVariants && payload.mumVariants.length > 0) {
-      ;(attributes.properties as Record<string, unknown>).mum_variants =
-        payload.mumVariants
-    }
+
+
     if (payload.birthdays && payload.birthdays.length > 0) {
       ;(attributes.properties as Record<string, unknown>).birthdays =
         payload.birthdays
@@ -179,10 +177,8 @@ export class KlaviyoClient {
       ;(attributes.properties as Record<string, unknown>).consent_timestamp =
         payload.consentTimestamp
     }
-    if (payload.mumVariants && payload.mumVariants.length > 0) {
-      ;(attributes.properties as Record<string, unknown>).mum_variants =
-        payload.mumVariants
-    }
+
+
     if (payload.birthdays && payload.birthdays.length > 0) {
       ;(attributes.properties as Record<string, unknown>).birthdays =
         payload.birthdays
