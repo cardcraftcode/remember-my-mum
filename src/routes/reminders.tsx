@@ -96,7 +96,7 @@ function RemindersPage() {
         <div className="mb-6 text-center">
           <h1 className="text-3xl font-semibold text-gray-900">Never forget Mum</h1>
           <p className="mt-2 text-gray-600">
-            We'll send a gentle reminder before each occasion so you have time to pick the
+            We'll send a reminder before each occasion so you have time to pick the
             perfect card.
           </p>
         </div>
@@ -128,7 +128,7 @@ function RemindersPage() {
                 onChange={(e) => setRemindsBirthday(e.target.checked)}
                 className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
               />
-              <span className="text-gray-900">Remind me about Mum's birthday</span>
+              <span className="text-gray-900">Remind me about her birthday</span>
             </label>
             {remindsBirthday && (
               <div className="mt-3 pl-8">
@@ -171,7 +171,7 @@ function RemindersPage() {
 
           <div>
             <p className="mb-3 text-sm font-medium text-gray-700">
-              What do you call her? (select all that apply)
+              Who is this reminder for? (select all that apply)
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {MUM_VARIANTS.map((variant) => (
