@@ -7,12 +7,13 @@ import {
 } from '@/lib/shopify.server'
 
 const OAUTH_COOKIE = 'momcards_oauth'
-const guestSecret = process.env.GUEST_TOKEN_SECRET || process.env.SHOPIFY_API_SECRET
 
 export const Route = createFileRoute('/auth/shopify')({
   server: {
     handlers: {
       GET: async ({ request }) => {
+        const guestSecret = process.env.GUEST_TOKEN_SECRET || process.env.SHOPIFY_API_SECRET
+
         if (!process.env.SHOPIFY_APP_API_KEY) {
           return new Response('Missing Shopify app configuration', { status: 500 })
         }
@@ -21,12 +22,14 @@ export const Route = createFileRoute('/auth/shopify')({
         }
 
         const url = new URL(request.url)
+        const shopDomain =
+          process.env.SHOPIFY_SHOP_DOMAIN || url.searchParams.get('shop') || ''
         const shopId =
           process.env.SHOPIFY_SHOP_ID || url.searchParams.get('shop_id') || ''
 
-        if (!shopId || !/^\d+$/.test(shopId)) {
+        if (!shopDomain && (!shopId || !/^\d+$/.test(shopId))) {
           return new Response(
-            'Missing or invalid Shopify shop ID. Set SHOPIFY_SHOP_ID (numeric) or provide ?shop_id=',
+            'Missing Shopify store configuration. Set SHOPIFY_SHOP_DOMAIN or SHOPIFY_SHOP_ID.',
             { status: 400 },
           )
         }
@@ -34,8 +37,9 @@ export const Route = createFileRoute('/auth/shopify')({
         const origin = url.origin
         const redirectUri = `${origin}/auth/shopify/callback`
 
-        // Shopify Customer Account API OIDC discovery lives at shopify.com/authentication/{shop_id}
-        const discoveryUrl = `https://shopify.com/authentication/${shopId}/.well-known/openid-configuration`
+        const discoveryUrl = shopDomain
+          ? `https://${shopDomain.replace(/^https?:\/\//, '').replace(/\/$/, '')}/.well-known/openid-configuration`
+          : `https://shopify.com/authentication/${shopId}/.well-known/openid-configuration`
 
         const openidConfigRes = await fetch(discoveryUrl, {
           headers: { Accept: 'application/json' },
@@ -63,6 +67,7 @@ export const Route = createFileRoute('/auth/shopify')({
           code_verifier: codeVerifier,
           origin,
           shopId,
+          shopDomain,
         })
           .setProtectedHeader({ alg: 'HS256' })
           .setIssuedAt()
