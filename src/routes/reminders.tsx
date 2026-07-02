@@ -114,8 +114,7 @@ function RemindersPage() {
         <div className="mx-auto max-w-md rounded-2xl bg-white p-8 shadow-sm text-center">
           <h1 className="mb-3 text-2xl font-semibold text-gray-900">You're all set 💌</h1>
           <p className="text-gray-600">
-            We'll send you a friendly reminder before each occasion so you never miss a moment
-            with Mum.
+            We'll send you a reminder before each occasion so you never miss a moment.
           </p>
         </div>
       </div>
