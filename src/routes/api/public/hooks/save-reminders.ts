@@ -1,13 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { upsertCustomerAndReminders } from '@/lib/reminders.server'
+import { MUM_VARIANTS } from '@/lib/mum-variants'
 
 // Public endpoint called by the Shopify Checkout UI Extension on the
 // Thank You page. Called cross-origin from *.myshopify.com and the
 // shop's checkout domain, so it must set CORS headers.
 //
 // Body shape (from shopify-extension/extensions/mum-reminders):
-//   { email, order_id?, mum_birthday? (DD/MM), reminders: { birthday, christmas, mothers_day } }
+//   { email, order_id?, mum_birthday? (DD/MM), reminders: { birthday, christmas, mothers_day }, mum_variants? }
+
 
 const bodySchema = z.object({
   email: z.string().email(),
