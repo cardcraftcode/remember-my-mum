@@ -116,8 +116,9 @@ export async function createGuestToken(customerId: string) {
   const token = await signGuestToken(
     { customerId: customer.id, email: customer.email, version: 1 },
     guestSecret,
-    '365d',
+    '7d',
   )
+
 
   return { token }
 }
@@ -328,9 +329,12 @@ export const verifyGuestDashboardToken = createServerFn({ method: 'POST' })
   .validator((input: unknown) => z.object({ token: z.string().min(1) }).parse(input))
   .handler(async ({ data }) => verifyGuestAndSignSession(data.token))
 
-export const createGuestDashboardLink = createServerFn({ method: 'POST' })
-  .validator((input: unknown) => z.object({ customerId: z.string().uuid() }).parse(input))
-  .handler(async ({ data }) => createGuestToken(data.customerId))
+// NOTE: createGuestDashboardLink is intentionally NOT exposed as a server function.
+// Call createGuestToken() directly from trusted server-side code only (e.g. webhooks
+// that email the login link to the customer). Exposing it publicly would let anyone
+// mint a dashboard session for any customer UUID.
+
+
 
 export const exchangeShopifyAuth = createServerFn({ method: 'POST' })
   .validator((input: unknown) =>
