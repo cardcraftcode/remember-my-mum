@@ -5,9 +5,17 @@ import type { Database } from '@/integrations/supabase/types'
 import { upsertCustomerAndReminders } from '@/lib/reminders.server'
 import { verifyShopifySessionToken } from '@/lib/shopify.server'
 
+const BirthdayEntrySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  mumVariants: z.array(z.string()).default([]),
+})
+
 const ReminderPayloadSchema = z.object({
   email: z.string().email(),
   shopDomain: z.string().min(1),
+  // New multi-birthday shape.
+  birthdays: z.array(BirthdayEntrySchema).optional(),
+  // Legacy single-birthday fields — used only if `birthdays` is absent.
   mumBirthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   remindsBirthday: z.boolean().optional(),
   remindsChristmas: z.boolean().optional(),
