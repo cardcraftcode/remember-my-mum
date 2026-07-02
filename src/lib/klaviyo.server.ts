@@ -9,6 +9,12 @@ type KlaviyoProfile = {
   properties?: Record<string, unknown>
 }
 
+export type KlaviyoBirthdayEntry = {
+  date: string
+  next: string
+  mumVariants: string[]
+}
+
 export type KlaviyoProfilePayload = {
   email: string
   firstName?: string
@@ -17,6 +23,7 @@ export type KlaviyoProfilePayload = {
   shopifyCustomerId?: string | null
   mumBirthday?: string | null
   mumBirthdayNext?: string | null
+  birthdays?: KlaviyoBirthdayEntry[]
   remindsBirthday?: boolean
   remindsChristmas?: boolean
   remindsMothersDay?: boolean
@@ -104,6 +111,10 @@ export class KlaviyoClient {
       ;(attributes.properties as Record<string, unknown>).mum_variants =
         payload.mumVariants
     }
+    if (payload.birthdays && payload.birthdays.length > 0) {
+      ;(attributes.properties as Record<string, unknown>).birthdays =
+        payload.birthdays
+    }
 
 
     const body = {
@@ -171,6 +182,10 @@ export class KlaviyoClient {
     if (payload.mumVariants && payload.mumVariants.length > 0) {
       ;(attributes.properties as Record<string, unknown>).mum_variants =
         payload.mumVariants
+    }
+    if (payload.birthdays && payload.birthdays.length > 0) {
+      ;(attributes.properties as Record<string, unknown>).birthdays =
+        payload.birthdays
     }
 
 

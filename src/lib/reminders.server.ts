@@ -1,28 +1,37 @@
-import { format, parseISO } from 'date-fns'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/integrations/supabase/types'
 import { createKlaviyoClient, type KlaviyoProfilePayload } from './klaviyo.server'
 import { nextBirthday } from './dates.server'
-import { MUM_VARIANTS, type MumVariant } from './mum-variants'
 
+
+export type BirthdayEntry = {
+  date: string // ISO YYYY-MM-DD
+  mumVariants: string[]
+}
 
 type UpsertReminderInput = {
   email: string
   shopDomain: string
   shopifyCustomerId?: string | null
   authUserId?: string | null
-  mumBirthday?: string | null
-  remindsBirthday?: boolean
+  // Canonical multi-birthday input. When provided (even if empty array), the
+  // customer's birthday reminders are replaced with the given entries.
+  birthdays?: BirthdayEntry[]
   remindsChristmas?: boolean
   remindsMothersDay?: boolean
   consentTimestamp?: Date
-  mumVariants?: MumVariant[]
 }
-
 
 export type CustomerWithReminders = {
   customer: Database['public']['Tables']['reminder_customers']['Row']
   reminders: Database['public']['Tables']['reminders']['Row'][]
+}
+
+function unionVariants(birthdays: BirthdayEntry[] | undefined): string[] {
+  if (!birthdays) return []
+  const set = new Set<string>()
+  for (const b of birthdays) for (const v of b.mumVariants) set.add(v)
+  return Array.from(set)
 }
 
 export async function upsertCustomerAndReminders(
@@ -55,6 +64,7 @@ export async function upsertCustomerAndReminders(
 
   const now = new Date()
   const consentTimestamp = input.consentTimestamp ?? now
+  const aggregatedVariants = unionVariants(input.birthdays)
 
   let customer: Database['public']['Tables']['reminder_customers']['Row']
 
@@ -66,8 +76,7 @@ export async function upsertCustomerAndReminders(
     if (input.shopDomain) update.shop_domain = input.shopDomain
     if (input.shopifyCustomerId) update.shopify_customer_id = input.shopifyCustomerId
     if (input.authUserId) update.auth_user_id = input.authUserId
-    if (input.mumVariants) update.mum_variants = input.mumVariants
-
+    if (input.birthdays !== undefined) update.mum_variants = aggregatedVariants
 
     const { data: updated, error: updateError } = await supabaseAdmin
       .from('reminder_customers')
@@ -85,7 +94,7 @@ export async function upsertCustomerAndReminders(
       shopify_customer_id: input.shopifyCustomerId ?? null,
       auth_user_id: input.authUserId ?? null,
       consent_timestamp: consentTimestamp.toISOString(),
-      mum_variants: input.mumVariants ?? [],
+      mum_variants: aggregatedVariants,
     }
 
     const { data: inserted, error: insertError } = await supabaseAdmin
@@ -98,69 +107,68 @@ export async function upsertCustomerAndReminders(
     customer = inserted
   }
 
-  // Upsert reminders
-  const reminders: Database['public']['Tables']['reminders']['Row'][] = []
+  // Replace birthday rows when a birthdays array was supplied.
+  if (input.birthdays !== undefined) {
+    const { error: deleteError } = await supabaseAdmin
+      .from('reminders')
+      .delete()
+      .eq('customer_id', customer.id)
+      .eq('event_type', 'birthday')
 
-  const reminderEntries: Array<{
-    eventType: Database['public']['Enums']['reminder_event_type']
+    if (deleteError) throw deleteError
+
+    if (input.birthdays.length > 0) {
+      const rows: Database['public']['Tables']['reminders']['Insert'][] =
+        input.birthdays.map((b) => ({
+          customer_id: customer.id,
+          event_type: 'birthday',
+          event_date: b.date,
+          enabled: true,
+          mum_variants: b.mumVariants,
+        }))
+
+      const { error: birthdayInsertError } = await supabaseAdmin
+        .from('reminders')
+        .insert(rows)
+
+      if (birthdayInsertError) throw birthdayInsertError
+    }
+  }
+
+  // Christmas / Mother's Day: single row per customer, keep upsert.
+  const singletonEntries: Array<{
+    eventType: 'christmas' | 'mothers_day'
     enabled: boolean | undefined
-    date: string | null
   }> = [
-    {
-      eventType: 'birthday',
-      enabled: input.remindsBirthday,
-      date: input.mumBirthday ?? null,
-    },
-    {
-      eventType: 'christmas',
-      enabled: input.remindsChristmas,
-      date: null,
-    },
-    {
-      eventType: 'mothers_day',
-      enabled: input.remindsMothersDay,
-      date: null,
-    },
+    { eventType: 'christmas', enabled: input.remindsChristmas },
+    { eventType: 'mothers_day', enabled: input.remindsMothersDay },
   ]
 
-  for (const entry of reminderEntries) {
+  for (const entry of singletonEntries) {
     if (entry.enabled === undefined) continue
 
     const insertReminder: Database['public']['Tables']['reminders']['Insert'] = {
       customer_id: customer.id,
       event_type: entry.eventType,
-      event_date: entry.date,
+      event_date: null,
       enabled: entry.enabled,
     }
 
-    const { data: reminder, error: reminderError } = await supabaseAdmin
+    const { error: reminderError } = await supabaseAdmin
       .from('reminders')
       .upsert(insertReminder, { onConflict: 'customer_id,event_type' })
-      .select()
-      .single()
 
     if (reminderError) throw reminderError
-    if (reminder) reminders.push(reminder)
   }
 
-  // Sync to Klaviyo
-  const mumBirthdayNext = input.mumBirthday
-    ? nextBirthday(input.mumBirthday)
-    : null
+  const { data: reminders, error: fetchError } = await supabaseAdmin
+    .from('reminders')
+    .select('*')
+    .eq('customer_id', customer.id)
 
-  const klaviyoPayload: KlaviyoProfilePayload = {
-    email: customer.email,
-    shopDomain: customer.shop_domain ?? undefined,
-    shopifyCustomerId: customer.shopify_customer_id,
-    mumBirthday: input.mumBirthday ?? null,
-    mumBirthdayNext,
-    remindsBirthday: input.remindsBirthday ?? false,
-    remindsChristmas: input.remindsChristmas ?? false,
-    remindsMothersDay: input.remindsMothersDay ?? false,
-    consentTimestamp: consentTimestamp.toISOString(),
-    mumVariants: input.mumVariants ?? customer.mum_variants ?? [],
-  }
+  if (fetchError) throw fetchError
 
+  const klaviyoPayload = buildKlaviyoPayload(customer, reminders ?? [])
 
   try {
     let profile: { id: string; email: string }
@@ -191,30 +199,39 @@ export async function upsertCustomerAndReminders(
     // Do not throw — DB write succeeded; Klaviyo failure is logged for retry.
   }
 
-  return { customer, reminders }
+  return { customer, reminders: reminders ?? [] }
 }
 
 export function buildKlaviyoPayload(
   customer: Database['public']['Tables']['reminder_customers']['Row'],
   reminders: Database['public']['Tables']['reminders']['Row'][],
 ): KlaviyoProfilePayload {
-  const birthdayReminder = reminders.find((r) => r.event_type === 'birthday')
+  const birthdayReminders = reminders
+    .filter((r) => r.event_type === 'birthday' && r.enabled && r.event_date)
+    .sort((a, b) => (a.event_date ?? '').localeCompare(b.event_date ?? ''))
+
   const christmasReminder = reminders.find((r) => r.event_type === 'christmas')
   const mothersDayReminder = reminders.find((r) => r.event_type === 'mothers_day')
+
+  const birthdays = birthdayReminders.map((r) => ({
+    date: r.event_date!,
+    next: nextBirthday(r.event_date!),
+    mumVariants: (r.mum_variants ?? []) as string[],
+  }))
+
+  const first = birthdays[0]
 
   return {
     email: customer.email,
     shopDomain: customer.shop_domain ?? undefined,
     shopifyCustomerId: customer.shopify_customer_id,
-    mumBirthday: birthdayReminder?.event_date ?? null,
-    mumBirthdayNext: birthdayReminder?.event_date
-      ? nextBirthday(birthdayReminder.event_date)
-      : null,
-    remindsBirthday: birthdayReminder?.enabled ?? false,
+    mumBirthday: first?.date ?? null,
+    mumBirthdayNext: first?.next ?? null,
+    birthdays,
+    remindsBirthday: birthdays.length > 0,
     remindsChristmas: christmasReminder?.enabled ?? false,
     remindsMothersDay: mothersDayReminder?.enabled ?? false,
     consentTimestamp: customer.consent_timestamp,
-    mumVariants: customer.mum_variants ?? [],
+    mumVariants: (customer.mum_variants ?? []) as string[],
   }
-
 }

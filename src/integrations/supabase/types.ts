@@ -102,6 +102,7 @@ export type Database = {
           event_date: string | null
           event_type: Database["public"]["Enums"]["reminder_event_type"]
           id: string
+          mum_variants: string[]
           updated_at: string
         }
         Insert: {
@@ -111,6 +112,7 @@ export type Database = {
           event_date?: string | null
           event_type: Database["public"]["Enums"]["reminder_event_type"]
           id?: string
+          mum_variants?: string[]
           updated_at?: string
         }
         Update: {
@@ -120,6 +122,7 @@ export type Database = {
           event_date?: string | null
           event_type?: Database["public"]["Enums"]["reminder_event_type"]
           id?: string
+          mum_variants?: string[]
           updated_at?: string
         }
         Relationships: [

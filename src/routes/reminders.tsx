@@ -23,28 +23,61 @@ export const Route = createFileRoute('/reminders')({
   }),
 })
 
+type BirthdayEntry = {
+  date: string // YYYY-MM-DD from <input type="date">
+  mumVariants: string[]
+}
+
+function emptyBirthday(): BirthdayEntry {
+  return { date: '', mumVariants: [] }
+}
+
 function RemindersPage() {
   const [email, setEmail] = useState('')
-  const [mumBirthday, setMumBirthday] = useState('')
+  const [birthdays, setBirthdays] = useState<BirthdayEntry[]>([emptyBirthday()])
   const [remindsBirthday, setRemindsBirthday] = useState(true)
   const [remindsChristmas, setRemindsChristmas] = useState(true)
   const [remindsMothersDay, setRemindsMothersDay] = useState(true)
-  const [mumVariants, setMumVariants] = useState<string[]>([])
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
+  const updateBirthday = (index: number, patch: Partial<BirthdayEntry>) => {
+    setBirthdays((prev) => prev.map((b, i) => (i === index ? { ...b, ...patch } : b)))
+  }
+
+  const toggleVariant = (index: number, variant: string, checked: boolean) => {
+    setBirthdays((prev) =>
+      prev.map((b, i) => {
+        if (i !== index) return b
+        const set = new Set(b.mumVariants)
+        if (checked) set.add(variant)
+        else set.delete(variant)
+        return { ...b, mumVariants: Array.from(set) }
+      }),
+    )
+  }
+
+  const addBirthday = () => setBirthdays((prev) => [...prev, emptyBirthday()])
+  const removeBirthday = (index: number) =>
+    setBirthdays((prev) => prev.filter((_, i) => i !== index))
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setStatus('submitting')
     setErrorMessage(null)
 
-    // Convert YYYY-MM-DD from <input type="date"> to DD/MM/YYYY expected by API.
-    let mum_birthday: string | null = null
-    if (remindsBirthday && mumBirthday) {
-      const [yyyy, mm, dd] = mumBirthday.split('-')
-      mum_birthday = `${dd}/${mm}/${yyyy}`
-    }
+    // Convert YYYY-MM-DD to DD/MM/YYYY for the API.
+    const birthdayPayload = remindsBirthday
+      ? birthdays
+          .filter((b) => !!b.date)
+          .map((b) => {
+            const [yyyy, mm, dd] = b.date.split('-')
+            return {
+              mum_birthday: `${dd}/${mm}/${yyyy}`,
+              mum_variants: b.mumVariants,
+            }
+          })
+      : []
 
     try {
       const res = await fetch('/api/public/hooks/save-reminders', {
@@ -52,14 +85,13 @@ function RemindersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email,
-          mum_birthday,
+          birthdays: birthdayPayload,
           reminders: {
-            birthday: remindsBirthday,
+            birthday: remindsBirthday && birthdayPayload.length > 0,
             christmas: remindsChristmas,
             mothers_day: remindsMothersDay,
           },
           shop_domain: 'momcards.co.uk',
-          mum_variants: mumVariants,
         }),
       })
 
@@ -130,21 +162,75 @@ function RemindersPage() {
               />
               <span className="text-gray-900">Remind me about her birthday</span>
             </label>
+
             {remindsBirthday && (
-              <div className="mt-3 pl-8">
-                <label className="block text-sm font-medium text-gray-700">
-                  Mum's birthday
-                </label>
-                <input
-                  type="date"
-                  required={remindsBirthday}
-                  value={mumBirthday}
-                  onChange={(e) => setMumBirthday(e.target.value)}
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-pink-500 focus:outline-none focus:ring-pink-500"
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  We'll email you 14 and 7 days before.
-                </p>
+              <div className="mt-4 space-y-4">
+                {birthdays.map((birthday, index) => (
+                  <div
+                    key={index}
+                    className="rounded-lg border border-gray-200 bg-pink-50/40 p-4"
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-gray-700">
+                        Birthday {index + 1}
+                      </p>
+                      {birthdays.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeBirthday(index)}
+                          className="text-xs text-gray-500 hover:text-red-600"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="mt-3">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Birthday date
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={birthday.date}
+                        onChange={(e) => updateBirthday(index, { date: e.target.value })}
+                        className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-pink-500 focus:outline-none focus:ring-pink-500"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        We'll email you 14 and 7 days before.
+                      </p>
+                    </div>
+
+                    <div className="mt-4">
+                      <p className="mb-2 text-sm font-medium text-gray-700">
+                        Who is this reminder for? (select all that apply)
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {MUM_VARIANTS.map((variant) => (
+                          <label key={variant} className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={birthday.mumVariants.includes(variant)}
+                              onChange={(e) =>
+                                toggleVariant(index, variant, e.target.checked)
+                              }
+                              className="h-4 w-4 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                            />
+                            <span className="text-sm text-gray-900">{variant}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={addBirthday}
+                  className="w-full rounded-lg border border-dashed border-pink-400 px-4 py-2 text-sm font-medium text-pink-600 hover:bg-pink-50"
+                >
+                  + Add another birthday
+                </button>
               </div>
             )}
           </div>
@@ -168,32 +254,6 @@ function RemindersPage() {
             />
             <span className="text-gray-900">Remind me about Christmas cards</span>
           </label>
-
-          <div>
-            <p className="mb-3 text-sm font-medium text-gray-700">
-              Who is this reminder for? (select all that apply)
-            </p>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {MUM_VARIANTS.map((variant) => (
-                <label key={variant} className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={mumVariants.includes(variant)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setMumVariants([...mumVariants, variant])
-                      } else {
-                        setMumVariants(mumVariants.filter((v) => v !== variant))
-                      }
-                    }}
-                    className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                  />
-                  <span className="text-gray-900">{variant}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
 
           {status === 'error' && errorMessage && (
             <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{errorMessage}</p>

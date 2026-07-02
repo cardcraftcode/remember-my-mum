@@ -5,9 +5,17 @@ import type { Database } from '@/integrations/supabase/types'
 import { upsertCustomerAndReminders } from '@/lib/reminders.server'
 import { verifyShopifySessionToken } from '@/lib/shopify.server'
 
+const BirthdayEntrySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  mumVariants: z.array(z.string()).default([]),
+})
+
 const ReminderPayloadSchema = z.object({
   email: z.string().email(),
   shopDomain: z.string().min(1),
+  // New multi-birthday shape.
+  birthdays: z.array(BirthdayEntrySchema).optional(),
+  // Legacy single-birthday fields — used only if `birthdays` is absent.
   mumBirthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   remindsBirthday: z.boolean().optional(),
   remindsChristmas: z.boolean().optional(),
@@ -103,13 +111,22 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
             return new Response('Forbidden', { status: 403 })
           }
 
+          // Derive canonical birthday list from either the new or legacy shape.
+          let birthdayInput: Array<{ date: string; mumVariants: string[] }> = []
+          if (payload.remindsBirthday === false) {
+            birthdayInput = []
+          } else if (payload.birthdays && payload.birthdays.length > 0) {
+            birthdayInput = payload.birthdays
+          } else if (payload.mumBirthday) {
+            birthdayInput = [{ date: payload.mumBirthday, mumVariants: [] }]
+          }
+
           const result = await upsertCustomerAndReminders({
             email: payload.email,
             shopDomain: payload.shopDomain,
             // Always derive from the verified token, never trust the client.
             shopifyCustomerId: tokenCustomerId,
-            mumBirthday: payload.mumBirthday ?? null,
-            remindsBirthday: payload.remindsBirthday ?? false,
+            birthdays: birthdayInput,
             remindsChristmas: payload.remindsChristmas ?? false,
             remindsMothersDay: payload.remindsMothersDay ?? false,
             consentTimestamp: new Date(),
