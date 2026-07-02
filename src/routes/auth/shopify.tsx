@@ -62,7 +62,7 @@ export const Route = createFileRoute('/auth/shopify')({
           state,
           code_verifier: codeVerifier,
           origin,
-          shopDomain,
+          shopId,
         })
           .setProtectedHeader({ alg: 'HS256' })
           .setIssuedAt()
