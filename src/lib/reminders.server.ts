@@ -27,12 +27,8 @@ export type CustomerWithReminders = {
   reminders: Database['public']['Tables']['reminders']['Row'][]
 }
 
-function unionVariants(birthdays: BirthdayEntry[] | undefined): string[] {
-  if (!birthdays) return []
-  const set = new Set<string>()
-  for (const b of birthdays) for (const v of b.mumVariants) set.add(v)
-  return Array.from(set)
-}
+
+
 
 export async function upsertCustomerAndReminders(
   input: UpsertReminderInput,
