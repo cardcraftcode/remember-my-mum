@@ -14,7 +14,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthShopifyRouteImport } from './routes/auth/shopify'
 import { Route as AuthShopifyCallbackRouteImport } from './routes/auth/shopify/callback'
 import { Route as ApiPublicShopifyRemindersRouteImport } from './routes/api/public/shopify/reminders'
-import { Route as ApiPublicKlaviyoWebhookRouteImport } from './routes/api/public/klaviyo/webhook'
 import { Route as ApiPublicHooksSyncKlaviyoRouteImport } from './routes/api/public/hooks/sync-klaviyo'
 
 const DashboardRoute = DashboardRouteImport.update({
@@ -43,11 +42,6 @@ const ApiPublicShopifyRemindersRoute =
     path: '/api/public/shopify/reminders',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiPublicKlaviyoWebhookRoute = ApiPublicKlaviyoWebhookRouteImport.update({
-  id: '/api/public/klaviyo/webhook',
-  path: '/api/public/klaviyo/webhook',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiPublicHooksSyncKlaviyoRoute =
   ApiPublicHooksSyncKlaviyoRouteImport.update({
     id: '/api/public/hooks/sync-klaviyo',
@@ -61,7 +55,6 @@ export interface FileRoutesByFullPath {
   '/auth/shopify': typeof AuthShopifyRouteWithChildren
   '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
   '/api/public/hooks/sync-klaviyo': typeof ApiPublicHooksSyncKlaviyoRoute
-  '/api/public/klaviyo/webhook': typeof ApiPublicKlaviyoWebhookRoute
   '/api/public/shopify/reminders': typeof ApiPublicShopifyRemindersRoute
 }
 export interface FileRoutesByTo {
@@ -70,7 +63,6 @@ export interface FileRoutesByTo {
   '/auth/shopify': typeof AuthShopifyRouteWithChildren
   '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
   '/api/public/hooks/sync-klaviyo': typeof ApiPublicHooksSyncKlaviyoRoute
-  '/api/public/klaviyo/webhook': typeof ApiPublicKlaviyoWebhookRoute
   '/api/public/shopify/reminders': typeof ApiPublicShopifyRemindersRoute
 }
 export interface FileRoutesById {
@@ -80,7 +72,6 @@ export interface FileRoutesById {
   '/auth/shopify': typeof AuthShopifyRouteWithChildren
   '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
   '/api/public/hooks/sync-klaviyo': typeof ApiPublicHooksSyncKlaviyoRoute
-  '/api/public/klaviyo/webhook': typeof ApiPublicKlaviyoWebhookRoute
   '/api/public/shopify/reminders': typeof ApiPublicShopifyRemindersRoute
 }
 export interface FileRouteTypes {
@@ -91,7 +82,6 @@ export interface FileRouteTypes {
     | '/auth/shopify'
     | '/auth/shopify/callback'
     | '/api/public/hooks/sync-klaviyo'
-    | '/api/public/klaviyo/webhook'
     | '/api/public/shopify/reminders'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -100,7 +90,6 @@ export interface FileRouteTypes {
     | '/auth/shopify'
     | '/auth/shopify/callback'
     | '/api/public/hooks/sync-klaviyo'
-    | '/api/public/klaviyo/webhook'
     | '/api/public/shopify/reminders'
   id:
     | '__root__'
@@ -109,7 +98,6 @@ export interface FileRouteTypes {
     | '/auth/shopify'
     | '/auth/shopify/callback'
     | '/api/public/hooks/sync-klaviyo'
-    | '/api/public/klaviyo/webhook'
     | '/api/public/shopify/reminders'
   fileRoutesById: FileRoutesById
 }
@@ -118,7 +106,6 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   AuthShopifyRoute: typeof AuthShopifyRouteWithChildren
   ApiPublicHooksSyncKlaviyoRoute: typeof ApiPublicHooksSyncKlaviyoRoute
-  ApiPublicKlaviyoWebhookRoute: typeof ApiPublicKlaviyoWebhookRoute
   ApiPublicShopifyRemindersRoute: typeof ApiPublicShopifyRemindersRoute
 }
 
@@ -159,13 +146,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicShopifyRemindersRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/klaviyo/webhook': {
-      id: '/api/public/klaviyo/webhook'
-      path: '/api/public/klaviyo/webhook'
-      fullPath: '/api/public/klaviyo/webhook'
-      preLoaderRoute: typeof ApiPublicKlaviyoWebhookRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/public/hooks/sync-klaviyo': {
       id: '/api/public/hooks/sync-klaviyo'
       path: '/api/public/hooks/sync-klaviyo'
@@ -193,7 +173,6 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   AuthShopifyRoute: AuthShopifyRouteWithChildren,
   ApiPublicHooksSyncKlaviyoRoute: ApiPublicHooksSyncKlaviyoRoute,
-  ApiPublicKlaviyoWebhookRoute: ApiPublicKlaviyoWebhookRoute,
   ApiPublicShopifyRemindersRoute: ApiPublicShopifyRemindersRoute,
 }
 export const routeTree = rootRouteImport
