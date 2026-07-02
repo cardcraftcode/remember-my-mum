@@ -86,7 +86,9 @@ export const updateReminders = createServerFn({ method: 'POST' })
         .eq('id', customer.id)
 
       if (variantUpdateError) throw variantUpdateError
+      customer.mum_variants = data.mumVariants
     }
+
 
 
     const reminderEntries: Array<{
