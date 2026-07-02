@@ -1,5 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { exchangeShopifyAuthCode } from '@/lib/auth'
+import { getShopifyCustomerAccountDomain } from '@/lib/shopify.server'
 
 export const Route = createFileRoute('/auth/shopify/callback')({
   server: {
@@ -21,10 +22,10 @@ export const Route = createFileRoute('/auth/shopify/callback')({
           return new Response('Missing authorization code or state', { status: 400 })
         }
 
-        const shopDomain = process.env.SHOPIFY_SHOP_DOMAIN || ''
+        const shopDomain = getShopifyCustomerAccountDomain()
         if (!shopDomain) {
           return new Response(
-            'Missing SHOPIFY_SHOP_DOMAIN environment variable. Set it to your Shopify domain (e.g. momcards.myshopify.com).',
+            'Missing SHOPIFY_CUSTOMER_ACCOUNT_DOMAIN environment variable. Set it to your storefront domain (e.g. momcards.co.uk).',
             { status: 500 },
           )
         }

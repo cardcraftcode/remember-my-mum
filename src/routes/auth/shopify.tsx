@@ -4,6 +4,8 @@ import {
   generateCodeVerifier,
   generateCodeChallenge,
   generateOAuthState,
+  getShopifyCustomerAccountDomain,
+  shopifyCustomerAccountFetchHeaders,
 } from '@/lib/shopify.server'
 
 const OAUTH_COOKIE = 'momcards_oauth'
@@ -22,14 +24,11 @@ export const Route = createFileRoute('/auth/shopify')({
         }
 
         const url = new URL(request.url)
-        const shopDomain =
-          process.env.SHOPIFY_SHOP_DOMAIN || url.searchParams.get('shop') || ''
-        const shopId =
-          process.env.SHOPIFY_SHOP_ID || url.searchParams.get('shop_id') || ''
+        const shopDomain = getShopifyCustomerAccountDomain(url.searchParams.get('shop'))
 
-        if (!shopDomain && (!shopId || !/^\d+$/.test(shopId))) {
+        if (!shopDomain) {
           return new Response(
-            'Missing Shopify store configuration. Set SHOPIFY_SHOP_DOMAIN or SHOPIFY_SHOP_ID.',
+            'Missing Shopify customer account domain. Set SHOPIFY_CUSTOMER_ACCOUNT_DOMAIN to your storefront domain, e.g. momcards.co.uk.',
             { status: 400 },
           )
         }
@@ -37,12 +36,10 @@ export const Route = createFileRoute('/auth/shopify')({
         const origin = url.origin
         const redirectUri = `${origin}/auth/shopify/callback`
 
-        const discoveryUrl = shopDomain
-          ? `https://${shopDomain.replace(/^https?:\/\//, '').replace(/\/$/, '')}/.well-known/openid-configuration`
-          : `https://shopify.com/authentication/${shopId}/.well-known/openid-configuration`
+        const discoveryUrl = `https://${shopDomain}/.well-known/openid-configuration`
 
         const openidConfigRes = await fetch(discoveryUrl, {
-          headers: { Accept: 'application/json' },
+          headers: shopifyCustomerAccountFetchHeaders(),
         })
 
         if (!openidConfigRes.ok) {
@@ -66,7 +63,6 @@ export const Route = createFileRoute('/auth/shopify')({
           state,
           code_verifier: codeVerifier,
           origin,
-          shopId,
           shopDomain,
         })
           .setProtectedHeader({ alg: 'HS256' })
