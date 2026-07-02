@@ -126,10 +126,9 @@ function RemindersPage() {
     <div className="min-h-screen bg-pink-50 p-6">
       <div className="mx-auto max-w-md">
         <div className="mb-6 text-center">
-          <h1 className="text-3xl font-semibold text-gray-900">Never forget Mum</h1>
+          <h1 className="text-3xl font-semibold text-gray-900">Never forget an occasion</h1>
           <p className="mt-2 text-gray-600">
-            We'll send a reminder before each occasion so you have time to pick the
-            perfect card.
+            We'll send a reminder so you have time to pick the perfect card.
           </p>
         </div>
 
