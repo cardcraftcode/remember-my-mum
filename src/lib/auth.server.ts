@@ -176,11 +176,9 @@ export async function exchangeShopifyAuthCode(data: {
   const tokenResponse = await fetch(openidConfig.token_endpoint, {
     method: 'POST',
     headers: {
+      ...shopifyCustomerAccountFetchHeaders(),
       'Content-Type': 'application/x-www-form-urlencoded',
       Accept: 'application/json',
-      Authorization: `Basic ${Buffer.from(
-        `${process.env.SHOPIFY_APP_API_KEY}:${process.env.SHOPIFY_API_SECRET}`,
-      ).toString('base64')}`,
     },
     body: new URLSearchParams({
       grant_type: 'authorization_code',
