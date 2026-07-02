@@ -18,7 +18,7 @@ function getSupabaseAdmin() {
   })
 }
 
-const MumVariantSchema = z.enum(MUM_VARIANTS as [string, ...string[]])
+const MumVariantSchema = z.enum([...MUM_VARIANTS] as [string, ...string[]])
 
 const UpdateRemindersSchema = z.object({
   mumBirthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
