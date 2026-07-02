@@ -1,13 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { upsertCustomerAndReminders } from '@/lib/reminders.server'
+import { MUM_VARIANTS, type MumVariant } from '@/lib/mum-variants'
+
 
 // Public endpoint called by the Shopify Checkout UI Extension on the
 // Thank You page. Called cross-origin from *.myshopify.com and the
 // shop's checkout domain, so it must set CORS headers.
 //
 // Body shape (from shopify-extension/extensions/mum-reminders):
-//   { email, order_id?, mum_birthday? (DD/MM), reminders: { birthday, christmas, mothers_day } }
+//   { email, order_id?, mum_birthday? (DD/MM), reminders: { birthday, christmas, mothers_day }, mum_variants? }
+
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -23,7 +26,9 @@ const bodySchema = z.object({
     mothers_day: z.boolean(),
   }),
   shop_domain: z.string().optional(),
+  mum_variants: z.array(z.enum([...MUM_VARIANTS] as [string, ...string[]])).optional(),
 })
+
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -68,7 +73,7 @@ export const Route = createFileRoute('/api/public/hooks/save-reminders')({
           return json(400, { error: 'Invalid body', issues: parsed.error.issues })
         }
 
-        const { email, mum_birthday, reminders, shop_domain } = parsed.data
+        const { email, mum_birthday, reminders, shop_domain, mum_variants } = parsed.data
 
         try {
           const result = await upsertCustomerAndReminders({
@@ -78,7 +83,9 @@ export const Route = createFileRoute('/api/public/hooks/save-reminders')({
             remindsBirthday: reminders.birthday,
             remindsChristmas: reminders.christmas,
             remindsMothersDay: reminders.mothers_day,
+            mumVariants: mum_variants as MumVariant[] | undefined,
           })
+
           return json(200, { ok: true, customer_id: result.customer.id })
         } catch (err) {
           return json(500, {

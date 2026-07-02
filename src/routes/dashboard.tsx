@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getDashboardData, updateReminders } from '@/lib/reminders.functions'
 import { getSession, logout, verifyGuestDashboardToken } from '@/lib/auth'
+import { MUM_VARIANTS } from '@/lib/mum-variants'
+
 
 export const Route = createFileRoute('/dashboard')({
   component: DashboardPage,
@@ -161,7 +163,7 @@ function DashboardPage() {
 }
 
 type ReminderFormProps = {
-  customer: { email: string }
+  customer: { email: string; mum_variants?: string[] | null }
   birthday?: { event_date: string | null; enabled: boolean }
   christmas?: { enabled: boolean }
   mothersDay?: { enabled: boolean }
@@ -170,15 +172,19 @@ type ReminderFormProps = {
     remindsBirthday: boolean
     remindsChristmas: boolean
     remindsMothersDay: boolean
+    mumVariants: string[]
   }) => void
   isSubmitting: boolean
 }
 
-function ReminderForm({ birthday, christmas, mothersDay, onSubmit, isSubmitting }: ReminderFormProps) {
+
+function ReminderForm({ customer, birthday, christmas, mothersDay, onSubmit, isSubmitting }: ReminderFormProps) {
   const [mumBirthday, setMumBirthday] = useState(birthday?.event_date ?? '')
   const [remindsBirthday, setRemindsBirthday] = useState(birthday?.enabled ?? false)
   const [remindsChristmas, setRemindsChristmas] = useState(christmas?.enabled ?? false)
   const [remindsMothersDay, setRemindsMothersDay] = useState(mothersDay?.enabled ?? false)
+  const [mumVariants, setMumVariants] = useState<string[]>(customer.mum_variants ?? [])
+
 
   return (
     <form
@@ -189,6 +195,7 @@ function ReminderForm({ birthday, christmas, mothersDay, onSubmit, isSubmitting 
           remindsBirthday,
           remindsChristmas,
           remindsMothersDay,
+          mumVariants,
         })
       }}
       className="space-y-6 rounded-2xl bg-white p-6 shadow-sm"
@@ -246,6 +253,31 @@ function ReminderForm({ birthday, christmas, mothersDay, onSubmit, isSubmitting 
         </label>
       </div>
 
+      <div>
+        <p className="mb-3 text-sm font-medium text-gray-700">
+          What do you call her? (select all that apply)
+        </p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {MUM_VARIANTS.map((variant) => (
+            <label key={variant} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={mumVariants.includes(variant)}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setMumVariants([...mumVariants, variant])
+                  } else {
+                    setMumVariants(mumVariants.filter((v) => v !== variant))
+                  }
+                }}
+                className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+              />
+              <span className="text-gray-900">{variant}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
       <button
         type="submit"
         disabled={isSubmitting}
@@ -253,6 +285,7 @@ function ReminderForm({ birthday, christmas, mothersDay, onSubmit, isSubmitting 
       >
         {isSubmitting ? 'Saving...' : 'Save reminders'}
       </button>
+
     </form>
   )
 }

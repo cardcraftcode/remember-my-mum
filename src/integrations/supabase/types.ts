@@ -61,6 +61,7 @@ export type Database = {
           guest_token_version: number
           id: string
           klaviyo_profile_id: string | null
+          mum_variants: string[]
           shop_domain: string | null
           shopify_customer_id: string | null
           updated_at: string
@@ -73,6 +74,7 @@ export type Database = {
           guest_token_version?: number
           id?: string
           klaviyo_profile_id?: string | null
+          mum_variants?: string[]
           shop_domain?: string | null
           shopify_customer_id?: string | null
           updated_at?: string
@@ -85,6 +87,7 @@ export type Database = {
           guest_token_version?: number
           id?: string
           klaviyo_profile_id?: string | null
+          mum_variants?: string[]
           shop_domain?: string | null
           shopify_customer_id?: string | null
           updated_at?: string

@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/integrations/supabase/types'
 import { createKlaviyoClient, type KlaviyoProfilePayload } from './klaviyo.server'
 import { nextBirthday } from './dates.server'
+import { MUM_VARIANTS, type MumVariant } from './mum-variants'
+
 
 type UpsertReminderInput = {
   email: string
@@ -14,7 +16,9 @@ type UpsertReminderInput = {
   remindsChristmas?: boolean
   remindsMothersDay?: boolean
   consentTimestamp?: Date
+  mumVariants?: MumVariant[]
 }
+
 
 export type CustomerWithReminders = {
   customer: Database['public']['Tables']['reminder_customers']['Row']
@@ -62,6 +66,8 @@ export async function upsertCustomerAndReminders(
     if (input.shopDomain) update.shop_domain = input.shopDomain
     if (input.shopifyCustomerId) update.shopify_customer_id = input.shopifyCustomerId
     if (input.authUserId) update.auth_user_id = input.authUserId
+    if (input.mumVariants) update.mum_variants = input.mumVariants
+
 
     const { data: updated, error: updateError } = await supabaseAdmin
       .from('reminder_customers')
@@ -79,7 +85,9 @@ export async function upsertCustomerAndReminders(
       shopify_customer_id: input.shopifyCustomerId ?? null,
       auth_user_id: input.authUserId ?? null,
       consent_timestamp: consentTimestamp.toISOString(),
+      mum_variants: input.mumVariants ?? [],
     }
+
     const { data: inserted, error: insertError } = await supabaseAdmin
       .from('reminder_customers')
       .insert(insert)
@@ -150,7 +158,9 @@ export async function upsertCustomerAndReminders(
     remindsChristmas: input.remindsChristmas ?? false,
     remindsMothersDay: input.remindsMothersDay ?? false,
     consentTimestamp: consentTimestamp.toISOString(),
+    mumVariants: input.mumVariants ?? customer.mum_variants ?? [],
   }
+
 
   try {
     let profile: { id: string; email: string }
@@ -204,5 +214,7 @@ export function buildKlaviyoPayload(
     remindsChristmas: christmasReminder?.enabled ?? false,
     remindsMothersDay: mothersDayReminder?.enabled ?? false,
     consentTimestamp: customer.consent_timestamp,
+    mumVariants: customer.mum_variants ?? [],
   }
+
 }

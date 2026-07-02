@@ -1,5 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
+import { MUM_VARIANTS } from '@/lib/mum-variants'
+
 
 export const Route = createFileRoute('/reminders')({
   component: RemindersPage,
@@ -27,8 +29,10 @@ function RemindersPage() {
   const [remindsBirthday, setRemindsBirthday] = useState(true)
   const [remindsChristmas, setRemindsChristmas] = useState(true)
   const [remindsMothersDay, setRemindsMothersDay] = useState(true)
+  const [mumVariants, setMumVariants] = useState<string[]>([])
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,8 +59,10 @@ function RemindersPage() {
             mothers_day: remindsMothersDay,
           },
           shop_domain: 'momcards.co.uk',
+          mum_variants: mumVariants,
         }),
       })
+
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
@@ -162,6 +168,32 @@ function RemindersPage() {
             />
             <span className="text-gray-900">Remind me about Christmas cards</span>
           </label>
+
+          <div>
+            <p className="mb-3 text-sm font-medium text-gray-700">
+              What do you call her? (select all that apply)
+            </p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {MUM_VARIANTS.map((variant) => (
+                <label key={variant} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={mumVariants.includes(variant)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setMumVariants([...mumVariants, variant])
+                      } else {
+                        setMumVariants(mumVariants.filter((v) => v !== variant))
+                      }
+                    }}
+                    className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                  />
+                  <span className="text-gray-900">{variant}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
 
           {status === 'error' && errorMessage && (
             <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{errorMessage}</p>

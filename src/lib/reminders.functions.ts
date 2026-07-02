@@ -6,6 +6,8 @@ import { createKlaviyoClient } from './klaviyo.server'
 import { buildKlaviyoPayload } from './reminders.server'
 import { nextBirthday } from './dates.server'
 import { readSessionCookie } from './auth.server'
+import { MUM_VARIANTS, type MumVariant } from './mum-variants'
+
 
 const supabaseUrl = process.env.SUPABASE_URL!
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -16,12 +18,16 @@ function getSupabaseAdmin() {
   })
 }
 
+const MumVariantSchema = z.enum([...MUM_VARIANTS] as [string, ...string[]])
+
 const UpdateRemindersSchema = z.object({
   mumBirthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   remindsBirthday: z.boolean().optional(),
   remindsChristmas: z.boolean().optional(),
   remindsMothersDay: z.boolean().optional(),
+  mumVariants: z.array(MumVariantSchema).optional(),
 })
+
 
 export const getDashboardData = createServerFn({ method: 'GET' })
   .validator(() => true)
@@ -73,7 +79,18 @@ export const updateReminders = createServerFn({ method: 'POST' })
       throw new Error('Customer not found')
     }
 
+    if (data.mumVariants !== undefined) {
+      const { error: variantUpdateError } = await supabaseAdmin
+        .from('reminder_customers')
+        .update({ mum_variants: data.mumVariants, updated_at: new Date().toISOString() })
+        .eq('id', customer.id)
+
+      if (variantUpdateError) throw variantUpdateError
+      customer.mum_variants = data.mumVariants
+    }
+
     const reminderEntries: Array<{
+
       eventType: Database['public']['Enums']['reminder_event_type']
       enabled?: boolean
       date?: string | null

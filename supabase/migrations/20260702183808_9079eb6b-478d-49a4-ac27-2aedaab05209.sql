@@ -1,0 +1,1 @@
+ALTER TABLE public.reminder_customers ADD COLUMN mum_variants text[] NOT NULL DEFAULT '{}';
