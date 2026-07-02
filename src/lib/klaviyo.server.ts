@@ -111,6 +111,10 @@ export class KlaviyoClient {
       ;(attributes.properties as Record<string, unknown>).mum_variants =
         payload.mumVariants
     }
+    if (payload.birthdays && payload.birthdays.length > 0) {
+      ;(attributes.properties as Record<string, unknown>).birthdays =
+        payload.birthdays
+    }
 
 
     const body = {
@@ -178,6 +182,10 @@ export class KlaviyoClient {
     if (payload.mumVariants && payload.mumVariants.length > 0) {
       ;(attributes.properties as Record<string, unknown>).mum_variants =
         payload.mumVariants
+    }
+    if (payload.birthdays && payload.birthdays.length > 0) {
+      ;(attributes.properties as Record<string, unknown>).birthdays =
+        payload.birthdays
     }
 
 
