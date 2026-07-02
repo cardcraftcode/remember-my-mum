@@ -1,0 +1,19 @@
+name = "mum-reminders"
+client_id = "REPLACE_WITH_CLIENT_ID_FROM_PARTNERS_DASHBOARD"
+application_url = "https://example.com"
+embedded = true
+
+[access_scopes]
+scopes = "read_customers"
+
+[auth]
+redirect_urls = [ "https://example.com/api/auth/callback" ]
+
+[webhooks]
+api_version = "2025-01"
+
+[pos]
+embedded = false
+
+[build]
+include_config_on_deploy = true

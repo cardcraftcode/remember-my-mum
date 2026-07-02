@@ -1,0 +1,17 @@
+api_version = "2025-01"
+
+[[extensions]]
+name = "Mum Reminders"
+handle = "mum-reminders"
+type = "ui_extension"
+
+  [[extensions.targeting]]
+  module = "./src/Checkout.tsx"
+  target = "purchase.thank-you.block.render"
+
+  [extensions.settings]
+    [[extensions.settings.fields]]
+    key = "backend_url"
+    type = "single_line_text_field"
+    name = "Backend URL"
+    description = "Base URL of the Mum Reminders app (no trailing slash)"
