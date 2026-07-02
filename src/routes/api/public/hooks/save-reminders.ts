@@ -72,7 +72,7 @@ export const Route = createFileRoute('/api/public/hooks/save-reminders')({
           return json(400, { error: 'Invalid body', issues: parsed.error.issues })
         }
 
-        const { email, mum_birthday, reminders, shop_domain } = parsed.data
+        const { email, mum_birthday, reminders, shop_domain, mum_variants } = parsed.data
 
         try {
           const result = await upsertCustomerAndReminders({
@@ -82,7 +82,9 @@ export const Route = createFileRoute('/api/public/hooks/save-reminders')({
             remindsBirthday: reminders.birthday,
             remindsChristmas: reminders.christmas,
             remindsMothersDay: reminders.mothers_day,
+            mumVariants: mum_variants,
           })
+
           return json(200, { ok: true, customer_id: result.customer.id })
         } catch (err) {
           return json(500, {
