@@ -122,12 +122,7 @@ export const Route = createFileRoute('/api/public/hooks/save-reminders')({
         } catch (err) {
           console.error('save-reminders failed', err)
           return json(500, {
-            error:
-              err instanceof Error
-                ? err.message
-                : typeof err === 'string'
-                  ? err
-                  : JSON.stringify(err),
+            error: err instanceof Error ? err.message : 'Unknown error',
           })
         }
       },
