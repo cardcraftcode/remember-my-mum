@@ -1,12 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
+import type { Database } from '@/integrations/supabase/types'
 import { upsertCustomerAndReminders } from '@/lib/reminders.server'
 import { verifyShopifySessionToken } from '@/lib/shopify.server'
 
 const ReminderPayloadSchema = z.object({
   email: z.string().email(),
   shopDomain: z.string().min(1),
-  shopifyCustomerId: z.string().optional().nullable(),
   mumBirthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   remindsBirthday: z.boolean().optional(),
   remindsChristmas: z.boolean().optional(),
@@ -32,6 +33,17 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
           return new Response('Invalid session token', { status: 401 })
         }
 
+        // The Shopify session token's `sub` is the customer's GID.
+        // We MUST bind the write to this token-derived identity — not to the
+        // client-supplied email — otherwise any authenticated customer can
+        // overwrite another customer's record by sending their email.
+        const tokenCustomerId = claims.sub
+        if (!tokenCustomerId) {
+          return new Response('Session token missing customer identity', {
+            status: 401,
+          })
+        }
+
         let body: unknown
         try {
           body = await request.json()
@@ -50,10 +62,52 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
         const payload = parsed.data
 
         try {
+          // Ensure the email in the payload isn't already bound to a
+          // different Shopify customer.
+          const supabaseUrl = process.env.SUPABASE_URL
+          const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+          if (!supabaseUrl || !supabaseServiceRoleKey) {
+            throw new Error('Missing Supabase server credentials')
+          }
+          const admin = createClient<Database>(
+            supabaseUrl,
+            supabaseServiceRoleKey,
+            {
+              auth: {
+                storage: undefined,
+                persistSession: false,
+                autoRefreshToken: false,
+              },
+            },
+          )
+
+          const { data: existing, error: lookupError } = await admin
+            .from('reminder_customers')
+            .select('id, email, shopify_customer_id')
+            .eq('email', payload.email)
+            .maybeSingle()
+
+          if (lookupError) {
+            console.error('Customer lookup failed', lookupError)
+            return new Response('Failed to save reminders. Please try again.', {
+              status: 500,
+            })
+          }
+
+          if (
+            existing &&
+            existing.shopify_customer_id &&
+            existing.shopify_customer_id !== tokenCustomerId
+          ) {
+            // Email belongs to a different Shopify customer — refuse.
+            return new Response('Forbidden', { status: 403 })
+          }
+
           const result = await upsertCustomerAndReminders({
             email: payload.email,
             shopDomain: payload.shopDomain,
-            shopifyCustomerId: payload.shopifyCustomerId,
+            // Always derive from the verified token, never trust the client.
+            shopifyCustomerId: tokenCustomerId,
             mumBirthday: payload.mumBirthday ?? null,
             remindsBirthday: payload.remindsBirthday ?? false,
             remindsChristmas: payload.remindsChristmas ?? false,
@@ -69,7 +123,7 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
         } catch (error) {
           console.error('Failed to save reminders', error)
           return new Response(
-            error instanceof Error ? error.message : 'Failed to save reminders',
+            'Failed to save reminders. Please try again.',
             { status: 500 },
           )
         }
