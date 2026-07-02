@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/integrations/supabase/types'
 import { createKlaviyoClient, type KlaviyoProfilePayload } from './klaviyo.server'
 import { nextBirthday } from './dates.server'
+import { MUM_VARIANTS, type MumVariant } from './mum-variants'
+
 
 type UpsertReminderInput = {
   email: string
