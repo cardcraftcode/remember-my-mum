@@ -178,11 +178,13 @@ type ReminderFormProps = {
 }
 
 
-function ReminderForm({ birthday, christmas, mothersDay, onSubmit, isSubmitting }: ReminderFormProps) {
+function ReminderForm({ customer, birthday, christmas, mothersDay, onSubmit, isSubmitting }: ReminderFormProps) {
   const [mumBirthday, setMumBirthday] = useState(birthday?.event_date ?? '')
   const [remindsBirthday, setRemindsBirthday] = useState(birthday?.enabled ?? false)
   const [remindsChristmas, setRemindsChristmas] = useState(christmas?.enabled ?? false)
   const [remindsMothersDay, setRemindsMothersDay] = useState(mothersDay?.enabled ?? false)
+  const [mumVariants, setMumVariants] = useState<string[]>(customer.mum_variants ?? [])
+
 
   return (
     <form
