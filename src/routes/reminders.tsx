@@ -181,7 +181,7 @@ function RemindersPage() {
                       )}
                     </div>
 
-                    <div className="mt-3">
+                    <div>
                       <label className="block text-sm font-medium text-gray-700">
                         Birthday date
                       </label>
