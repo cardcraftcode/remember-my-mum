@@ -195,6 +195,7 @@ function ReminderForm({ customer, birthday, christmas, mothersDay, onSubmit, isS
           remindsBirthday,
           remindsChristmas,
           remindsMothersDay,
+          mumVariants,
         })
       }}
       className="space-y-6 rounded-2xl bg-white p-6 shadow-sm"
