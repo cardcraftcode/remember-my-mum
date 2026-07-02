@@ -79,6 +79,16 @@ export const updateReminders = createServerFn({ method: 'POST' })
       throw new Error('Customer not found')
     }
 
+    if (data.mumVariants !== undefined) {
+      const { error: variantUpdateError } = await supabaseAdmin
+        .from('reminder_customers')
+        .update({ mum_variants: data.mumVariants, updated_at: new Date().toISOString() })
+        .eq('id', customer.id)
+
+      if (variantUpdateError) throw variantUpdateError
+    }
+
+
     const reminderEntries: Array<{
       eventType: Database['public']['Enums']['reminder_event_type']
       enabled?: boolean
