@@ -20,12 +20,17 @@ function getSupabaseAdmin() {
 
 const MumVariantSchema = z.enum([...MUM_VARIANTS] as [string, ...string[]])
 
+const BirthdayEntrySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  mumVariants: z.array(MumVariantSchema).default([]),
+})
+
 const UpdateRemindersSchema = z.object({
-  mumBirthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  remindsBirthday: z.boolean().optional(),
+  // When provided, the customer's birthday reminders are fully replaced with
+  // this list (empty array = no birthday reminders).
+  birthdays: z.array(BirthdayEntrySchema).optional(),
   remindsChristmas: z.boolean().optional(),
   remindsMothersDay: z.boolean().optional(),
-  mumVariants: z.array(MumVariantSchema).optional(),
 })
 
 
@@ -79,52 +84,61 @@ export const updateReminders = createServerFn({ method: 'POST' })
       throw new Error('Customer not found')
     }
 
-    if (data.mumVariants !== undefined) {
+    // Aggregate mum_variants union across all birthdays onto the customer row
+    // (kept for backward compatibility with existing Klaviyo segments).
+    if (data.birthdays !== undefined) {
+      const set = new Set<string>()
+      for (const b of data.birthdays) for (const v of b.mumVariants) set.add(v)
+      const aggregated = Array.from(set)
+
       const { error: variantUpdateError } = await supabaseAdmin
         .from('reminder_customers')
-        .update({ mum_variants: data.mumVariants, updated_at: new Date().toISOString() })
+        .update({ mum_variants: aggregated, updated_at: new Date().toISOString() })
         .eq('id', customer.id)
 
       if (variantUpdateError) throw variantUpdateError
-      customer.mum_variants = data.mumVariants
+      customer.mum_variants = aggregated
+
+      // Replace all birthday reminders.
+      const { error: deleteError } = await supabaseAdmin
+        .from('reminders')
+        .delete()
+        .eq('customer_id', customer.id)
+        .eq('event_type', 'birthday')
+
+      if (deleteError) throw deleteError
+
+      if (data.birthdays.length > 0) {
+        const rows: Database['public']['Tables']['reminders']['Insert'][] =
+          data.birthdays.map((b) => ({
+            customer_id: customer.id,
+            event_type: 'birthday',
+            event_date: b.date,
+            enabled: true,
+            mum_variants: b.mumVariants,
+          }))
+
+        const { error: insertError } = await supabaseAdmin.from('reminders').insert(rows)
+        if (insertError) throw insertError
+      }
     }
 
-    const reminderEntries: Array<{
-
-      eventType: Database['public']['Enums']['reminder_event_type']
-      enabled?: boolean
-      date?: string | null
+    const singletonEntries: Array<{
+      eventType: 'christmas' | 'mothers_day'
+      enabled: boolean | undefined
     }> = [
-      {
-        eventType: 'birthday',
-        enabled: data.remindsBirthday,
-        date: data.mumBirthday ?? null,
-      },
-      {
-        eventType: 'christmas',
-        enabled: data.remindsChristmas,
-      },
-      {
-        eventType: 'mothers_day',
-        enabled: data.remindsMothersDay,
-      },
+      { eventType: 'christmas', enabled: data.remindsChristmas },
+      { eventType: 'mothers_day', enabled: data.remindsMothersDay },
     ]
 
-    for (const entry of reminderEntries) {
-      if (entry.enabled === undefined && entry.date === undefined) continue
-
-      const { data: existing } = await supabaseAdmin
-        .from('reminders')
-        .select('*')
-        .eq('customer_id', customer.id)
-        .eq('event_type', entry.eventType)
-        .maybeSingle()
+    for (const entry of singletonEntries) {
+      if (entry.enabled === undefined) continue
 
       const payload: Database['public']['Tables']['reminders']['Insert'] = {
         customer_id: customer.id,
         event_type: entry.eventType,
-        event_date: entry.date ?? existing?.event_date ?? null,
-        enabled: entry.enabled ?? existing?.enabled ?? true,
+        event_date: null,
+        enabled: entry.enabled,
       }
 
       const { error: upsertError } = await supabaseAdmin
