@@ -116,8 +116,9 @@ export async function createGuestToken(customerId: string) {
   const token = await signGuestToken(
     { customerId: customer.id, email: customer.email, version: 1 },
     guestSecret,
-    '365d',
+    '7d',
   )
+
 
   return { token }
 }
