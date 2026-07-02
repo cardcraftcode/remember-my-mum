@@ -16,7 +16,9 @@ type UpsertReminderInput = {
   remindsChristmas?: boolean
   remindsMothersDay?: boolean
   consentTimestamp?: Date
+  mumVariants?: MumVariant[]
 }
+
 
 export type CustomerWithReminders = {
   customer: Database['public']['Tables']['reminder_customers']['Row']
