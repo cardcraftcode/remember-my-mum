@@ -1,7 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { upsertCustomerAndReminders } from '@/lib/reminders.server'
-import { MUM_VARIANTS } from '@/lib/mum-variants'
+import { MUM_VARIANTS, type MumVariant } from '@/lib/mum-variants'
+
 
 // Public endpoint called by the Shopify Checkout UI Extension on the
 // Thank You page. Called cross-origin from *.myshopify.com and the
