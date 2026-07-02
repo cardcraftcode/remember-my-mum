@@ -121,18 +121,32 @@ export const updateReminders = createServerFn({ method: 'POST' })
     for (const entry of singletonEntries) {
       if (entry.enabled === undefined) continue
 
-      const payload: Database['public']['Tables']['reminders']['Insert'] = {
-        customer_id: customer.id,
-        event_type: entry.eventType,
-        event_date: null,
-        enabled: entry.enabled,
-      }
-
-      const { error: upsertError } = await supabaseAdmin
+      const { data: existingReminder, error: existingErr } = await supabaseAdmin
         .from('reminders')
-        .upsert(payload, { onConflict: 'customer_id,event_type' })
+        .select('id')
+        .eq('customer_id', customer.id)
+        .eq('event_type', entry.eventType)
+        .maybeSingle()
 
-      if (upsertError) throw upsertError
+      if (existingErr) throw existingErr
+
+      if (existingReminder) {
+        const { error: updateErr } = await supabaseAdmin
+          .from('reminders')
+          .update({ enabled: entry.enabled })
+          .eq('id', existingReminder.id)
+        if (updateErr) throw updateErr
+      } else {
+        const { error: insertErr } = await supabaseAdmin
+          .from('reminders')
+          .insert({
+            customer_id: customer.id,
+            event_type: entry.eventType,
+            event_date: null,
+            enabled: entry.enabled,
+          })
+        if (insertErr) throw insertErr
+      }
     }
 
     const { data: reminders } = await supabaseAdmin
