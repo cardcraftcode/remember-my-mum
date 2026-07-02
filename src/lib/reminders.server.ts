@@ -158,7 +158,9 @@ export async function upsertCustomerAndReminders(
     remindsChristmas: input.remindsChristmas ?? false,
     remindsMothersDay: input.remindsMothersDay ?? false,
     consentTimestamp: consentTimestamp.toISOString(),
+    mumVariants: input.mumVariants ?? customer.mum_variants ?? [],
   }
+
 
   try {
     let profile: { id: string; email: string }
