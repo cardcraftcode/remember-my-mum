@@ -29,8 +29,10 @@ function RemindersPage() {
   const [remindsBirthday, setRemindsBirthday] = useState(true)
   const [remindsChristmas, setRemindsChristmas] = useState(true)
   const [remindsMothersDay, setRemindsMothersDay] = useState(true)
+  const [mumVariants, setMumVariants] = useState<string[]>([])
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
