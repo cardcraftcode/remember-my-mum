@@ -6,7 +6,7 @@ import type { MumVariant } from './mum-variants'
 
 export type BirthdayEntry = {
   date: string // ISO YYYY-MM-DD
-  mumVariants: MumVariant[]
+  mumVariants: string[]
 }
 
 type UpsertReminderInput = {
@@ -27,9 +27,9 @@ export type CustomerWithReminders = {
   reminders: Database['public']['Tables']['reminders']['Row'][]
 }
 
-function unionVariants(birthdays: BirthdayEntry[] | undefined): MumVariant[] {
+function unionVariants(birthdays: BirthdayEntry[] | undefined): string[] {
   if (!birthdays) return []
-  const set = new Set<MumVariant>()
+  const set = new Set<string>()
   for (const b of birthdays) for (const v of b.mumVariants) set.add(v)
   return Array.from(set)
 }
