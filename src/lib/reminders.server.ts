@@ -187,7 +187,7 @@ export async function upsertCustomerAndReminders(
 
     const { data: existingReminder, error: existingErr } = await supabaseAdmin
       .from('reminders')
-      .select('id')
+      .select('id, enabled')
       .eq('customer_id', customer.id)
       .eq('event_type', entry.eventType)
       .maybeSingle()
@@ -195,19 +195,24 @@ export async function upsertCustomerAndReminders(
     if (existingErr) throw existingErr
 
     if (existingReminder) {
-      const { error: updateErr } = await supabaseAdmin
-        .from('reminders')
-        .update({ enabled: entry.enabled })
-        .eq('id', existingReminder.id)
-      if (updateErr) throw updateErr
-    } else {
+      // Additive: only ever turn a singleton ON from a checkout submission,
+      // never off. A shopper who previously opted in should keep that
+      // preference even if a later form ships with the box unchecked.
+      if (entry.enabled && !existingReminder.enabled) {
+        const { error: updateErr } = await supabaseAdmin
+          .from('reminders')
+          .update({ enabled: true })
+          .eq('id', existingReminder.id)
+        if (updateErr) throw updateErr
+      }
+    } else if (entry.enabled) {
       const { error: insertErr } = await supabaseAdmin
         .from('reminders')
         .insert({
           customer_id: customer.id,
           event_type: entry.eventType,
           event_date: null,
-          enabled: entry.enabled,
+          enabled: true,
         })
       if (insertErr) throw insertErr
     }
