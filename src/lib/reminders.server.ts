@@ -260,12 +260,14 @@ export async function verifyCustomerByToken(
 
   const now = new Date().toISOString()
 
-  // If already verified (double-click on link), just clear token and return current state.
+  // Idempotent verification: keep the token so repeat clicks on the same
+  // link (e.g. Klaviyo test sends, users re-opening the email) continue to
+  // resolve successfully instead of showing "Link expired". A fresh token is
+  // minted on the next unverified upsert if we ever need to invalidate.
   const { data: updated, error: updateError } = await supabaseAdmin
     .from('reminder_customers')
     .update({
       verified_at: customer.verified_at ?? now,
-      verification_token: null,
       updated_at: now,
     })
     .eq('id', customer.id)
