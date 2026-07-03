@@ -1,6 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { randomBytes } from 'crypto'
 import type { Database } from '@/integrations/supabase/types'
-import { createKlaviyoClient, type KlaviyoProfilePayload } from './klaviyo.server'
+import { createKlaviyoClient, type KlaviyoProfilePayload, KlaviyoClient } from './klaviyo.server'
 import { nextBirthday } from './dates.server'
 
 
@@ -20,6 +21,9 @@ type UpsertReminderInput = {
   remindsChristmas?: boolean
   remindsMothersDay?: boolean
   consentTimestamp?: Date
+  // Base URL (e.g. "https://remember-my-mum.lovable.app") used to build the
+  // email verification link for unverified customers.
+  appBaseUrl?: string
 }
 
 export type CustomerWithReminders = {
@@ -27,12 +31,7 @@ export type CustomerWithReminders = {
   reminders: Database['public']['Tables']['reminders']['Row'][]
 }
 
-
-
-
-export async function upsertCustomerAndReminders(
-  input: UpsertReminderInput,
-): Promise<CustomerWithReminders> {
+function getSupabaseAdmin(): SupabaseClient<Database> {
   const supabaseUrl = process.env.SUPABASE_URL
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -40,14 +39,24 @@ export async function upsertCustomerAndReminders(
     throw new Error('Missing Supabase server credentials')
   }
 
-  const supabaseAdmin = createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
+  return createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
     auth: {
       storage: undefined,
       persistSession: false,
       autoRefreshToken: false,
     },
   })
+}
 
+function generateVerificationToken(): string {
+  return randomBytes(32).toString('hex')
+}
+
+
+export async function upsertCustomerAndReminders(
+  input: UpsertReminderInput,
+): Promise<CustomerWithReminders> {
+  const supabaseAdmin = getSupabaseAdmin()
   const klaviyo = createKlaviyoClient(supabaseAdmin)
 
   const { data: existing, error: findError } = await supabaseAdmin
@@ -73,6 +82,12 @@ export async function upsertCustomerAndReminders(
     if (input.shopifyCustomerId) update.shopify_customer_id = input.shopifyCustomerId
     if (input.authUserId) update.auth_user_id = input.authUserId
 
+    // If the customer has never verified their email, mint (or refresh) a
+    // verification token so we can send them a fresh confirmation link.
+    if (!existing.verified_at) {
+      update.verification_token = generateVerificationToken()
+      update.verification_sent_at = now.toISOString()
+    }
 
     const { data: updated, error: updateError } = await supabaseAdmin
       .from('reminder_customers')
@@ -90,6 +105,11 @@ export async function upsertCustomerAndReminders(
       shopify_customer_id: input.shopifyCustomerId ?? null,
       auth_user_id: input.authUserId ?? null,
       consent_timestamp: consentTimestamp.toISOString(),
+      // New customers always start unverified — they must click the email link
+      // before we send any reminders.
+      verified_at: null,
+      verification_token: generateVerificationToken(),
+      verification_sent_at: now.toISOString(),
     }
 
     const { data: inserted, error: insertError } = await supabaseAdmin
@@ -177,7 +197,82 @@ export async function upsertCustomerAndReminders(
 
   if (fetchError) throw fetchError
 
-  const klaviyoPayload = buildKlaviyoPayload(customer, reminders ?? [])
+  await syncCustomerToKlaviyo({
+    supabaseAdmin,
+    klaviyo,
+    customer,
+    reminders: reminders ?? [],
+    appBaseUrl: input.appBaseUrl,
+  })
+
+  return { customer, reminders: reminders ?? [] }
+}
+
+/**
+ * Marks a customer verified using the token from their confirmation email,
+ * then re-syncs their profile to Klaviyo so reminder flows can start.
+ * Returns the updated customer, or null when the token is invalid/expired.
+ */
+export async function verifyCustomerByToken(
+  token: string,
+  appBaseUrl?: string,
+): Promise<CustomerWithReminders | null> {
+  if (!token || token.length < 16) return null
+
+  const supabaseAdmin = getSupabaseAdmin()
+
+  const { data: customer, error } = await supabaseAdmin
+    .from('reminder_customers')
+    .select('*')
+    .eq('verification_token', token)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!customer) return null
+
+  const now = new Date().toISOString()
+
+  // If already verified (double-click on link), just clear token and return current state.
+  const { data: updated, error: updateError } = await supabaseAdmin
+    .from('reminder_customers')
+    .update({
+      verified_at: customer.verified_at ?? now,
+      verification_token: null,
+      updated_at: now,
+    })
+    .eq('id', customer.id)
+    .select()
+    .single()
+
+  if (updateError || !updated) throw updateError ?? new Error('Verification update failed')
+
+  const { data: reminders } = await supabaseAdmin
+    .from('reminders')
+    .select('*')
+    .eq('customer_id', updated.id)
+
+  const klaviyo = createKlaviyoClient(supabaseAdmin)
+  await syncCustomerToKlaviyo({
+    supabaseAdmin,
+    klaviyo,
+    customer: updated,
+    reminders: reminders ?? [],
+    appBaseUrl,
+  })
+
+  return { customer: updated, reminders: reminders ?? [] }
+}
+
+export async function syncCustomerToKlaviyo(args: {
+  supabaseAdmin: SupabaseClient<Database>
+  klaviyo: KlaviyoClient
+  customer: Database['public']['Tables']['reminder_customers']['Row']
+  reminders: Database['public']['Tables']['reminders']['Row'][]
+  appBaseUrl?: string
+}) {
+  const { supabaseAdmin, klaviyo, customer, reminders, appBaseUrl } = args
+
+  const klaviyoPayload = buildKlaviyoPayload(customer, reminders, appBaseUrl)
 
   try {
     let profile: { id: string; email: string }
@@ -195,25 +290,24 @@ export async function upsertCustomerAndReminders(
       customer.id,
       customer.klaviyo_profile_id ? 'update_profile' : 'upsert_profile',
       'success',
-      { profileId: profile.id },
+      { profileId: profile.id, verified: !!customer.verified_at },
     )
   } catch (error) {
     await klaviyo.logSync(
       customer.id,
       customer.klaviyo_profile_id ? 'update_profile' : 'upsert_profile',
       'error',
-      klaviyoPayload,
+      klaviyoPayload as unknown as Record<string, unknown>,
       error instanceof Error ? error.message : String(error),
     )
     // Do not throw — DB write succeeded; Klaviyo failure is logged for retry.
   }
-
-  return { customer, reminders: reminders ?? [] }
 }
 
 export function buildKlaviyoPayload(
   customer: Database['public']['Tables']['reminder_customers']['Row'],
   reminders: Database['public']['Tables']['reminders']['Row'][],
+  appBaseUrl?: string,
 ): KlaviyoProfilePayload {
   const birthdayReminders = reminders
     .filter((r) => r.event_type === 'birthday' && r.enabled && r.event_date)
@@ -229,6 +323,16 @@ export function buildKlaviyoPayload(
   }))
 
   const first = birthdays[0]
+  const isVerified = !!customer.verified_at
+
+  // Until the customer clicks the verification link, we still write the
+  // profile to Klaviyo so a "Verify your email" flow can send the confirmation
+  // email — but we force every reminds_* flag to false so no reminder flows
+  // can fire for an unverified address.
+  const verificationUrl =
+    !isVerified && customer.verification_token && appBaseUrl
+      ? `${appBaseUrl.replace(/\/$/, '')}/verify-reminders?token=${customer.verification_token}`
+      : null
 
   return {
     email: customer.email,
@@ -237,9 +341,11 @@ export function buildKlaviyoPayload(
     mumBirthday: first?.date ?? null,
     mumBirthdayNext: first?.next ?? null,
     birthdays,
-    remindsBirthday: birthdays.length > 0,
-    remindsChristmas: christmasReminder?.enabled ?? false,
-    remindsMothersDay: mothersDayReminder?.enabled ?? false,
+    remindsBirthday: isVerified && birthdays.length > 0,
+    remindsChristmas: isVerified && (christmasReminder?.enabled ?? false),
+    remindsMothersDay: isVerified && (mothersDayReminder?.enabled ?? false),
     consentTimestamp: customer.consent_timestamp,
+    remindersVerified: isVerified,
+    verificationUrl,
   }
 }
