@@ -320,6 +320,36 @@ export async function syncCustomerToKlaviyo(args: {
       'success',
       { profileId: profile.id, verified: !!customer.verified_at },
     )
+
+    // Fire a dedicated event for unverified customers so Klaviyo flows can
+    // trigger a confirmation email off the event rather than the (less
+    // reliable) profile-property-change trigger. `unique_id` includes the
+    // verification token so a fresh token = a fresh event, while double
+    // submits with the same token stay idempotent.
+    if (!customer.verified_at && klaviyoPayload.verificationUrl) {
+      try {
+        await klaviyo.trackEvent({
+          email: customer.email,
+          metricName: 'Reminders Verification Requested',
+          uniqueId: `verify-${customer.id}-${customer.verification_token ?? ''}`,
+          properties: {
+            verification_url: klaviyoPayload.verificationUrl,
+            shop_domain: customer.shop_domain,
+          },
+        })
+        await klaviyo.logSync(customer.id, 'track_verification_event', 'success', {
+          profileId: profile.id,
+        })
+      } catch (eventError) {
+        await klaviyo.logSync(
+          customer.id,
+          'track_verification_event',
+          'error',
+          { profileId: profile.id },
+          eventError instanceof Error ? eventError.message : String(eventError),
+        )
+      }
+    }
   } catch (error) {
     await klaviyo.logSync(
       customer.id,
