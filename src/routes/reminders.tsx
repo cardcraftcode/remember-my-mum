@@ -112,9 +112,11 @@ function RemindersPage() {
     return (
       <div className="min-h-screen bg-pink-50 p-6">
         <div className="mx-auto max-w-md rounded-2xl bg-white p-8 shadow-sm text-center">
-          <h1 className="mb-3 text-2xl font-semibold text-gray-900">You're all set 💌</h1>
+          <h1 className="mb-3 text-2xl font-semibold text-gray-900">Check your inbox 💌</h1>
           <p className="text-gray-600">
-            We'll send you a reminder before each occasion so you never miss a moment.
+            We've sent a confirmation email to <span className="font-medium">{email}</span>.
+            Click the link inside to activate your reminders — we won't send anything until
+            you confirm.
           </p>
         </div>
       </div>

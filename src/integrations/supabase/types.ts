@@ -64,6 +64,9 @@ export type Database = {
           shop_domain: string | null
           shopify_customer_id: string | null
           updated_at: string
+          verification_sent_at: string | null
+          verification_token: string | null
+          verified_at: string | null
         }
         Insert: {
           auth_user_id?: string | null
@@ -76,6 +79,9 @@ export type Database = {
           shop_domain?: string | null
           shopify_customer_id?: string | null
           updated_at?: string
+          verification_sent_at?: string | null
+          verification_token?: string | null
+          verified_at?: string | null
         }
         Update: {
           auth_user_id?: string | null
@@ -88,6 +94,9 @@ export type Database = {
           shop_domain?: string | null
           shopify_customer_id?: string | null
           updated_at?: string
+          verification_sent_at?: string | null
+          verification_token?: string | null
+          verified_at?: string | null
         }
         Relationships: []
       }

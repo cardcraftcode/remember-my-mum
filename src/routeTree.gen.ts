@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VerifyRemindersRouteImport } from './routes/verify-reminders'
 import { Route as RemindersRouteImport } from './routes/reminders'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
@@ -18,6 +19,11 @@ import { Route as ApiPublicShopifyRemindersRouteImport } from './routes/api/publ
 import { Route as ApiPublicHooksSyncKlaviyoRouteImport } from './routes/api/public/hooks/sync-klaviyo'
 import { Route as ApiPublicHooksSaveRemindersRouteImport } from './routes/api/public/hooks/save-reminders'
 
+const VerifyRemindersRoute = VerifyRemindersRouteImport.update({
+  id: '/verify-reminders',
+  path: '/verify-reminders',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RemindersRoute = RemindersRouteImport.update({
   id: '/reminders',
   path: '/reminders',
@@ -66,6 +72,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/reminders': typeof RemindersRoute
+  '/verify-reminders': typeof VerifyRemindersRoute
   '/auth/shopify': typeof AuthShopifyRouteWithChildren
   '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
   '/api/public/hooks/save-reminders': typeof ApiPublicHooksSaveRemindersRoute
@@ -76,6 +83,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/reminders': typeof RemindersRoute
+  '/verify-reminders': typeof VerifyRemindersRoute
   '/auth/shopify': typeof AuthShopifyRouteWithChildren
   '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
   '/api/public/hooks/save-reminders': typeof ApiPublicHooksSaveRemindersRoute
@@ -87,6 +95,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/reminders': typeof RemindersRoute
+  '/verify-reminders': typeof VerifyRemindersRoute
   '/auth/shopify': typeof AuthShopifyRouteWithChildren
   '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
   '/api/public/hooks/save-reminders': typeof ApiPublicHooksSaveRemindersRoute
@@ -99,6 +108,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/reminders'
+    | '/verify-reminders'
     | '/auth/shopify'
     | '/auth/shopify/callback'
     | '/api/public/hooks/save-reminders'
@@ -109,6 +119,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/reminders'
+    | '/verify-reminders'
     | '/auth/shopify'
     | '/auth/shopify/callback'
     | '/api/public/hooks/save-reminders'
@@ -119,6 +130,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/reminders'
+    | '/verify-reminders'
     | '/auth/shopify'
     | '/auth/shopify/callback'
     | '/api/public/hooks/save-reminders'
@@ -130,6 +142,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
   RemindersRoute: typeof RemindersRoute
+  VerifyRemindersRoute: typeof VerifyRemindersRoute
   AuthShopifyRoute: typeof AuthShopifyRouteWithChildren
   ApiPublicHooksSaveRemindersRoute: typeof ApiPublicHooksSaveRemindersRoute
   ApiPublicHooksSyncKlaviyoRoute: typeof ApiPublicHooksSyncKlaviyoRoute
@@ -138,6 +151,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/verify-reminders': {
+      id: '/verify-reminders'
+      path: '/verify-reminders'
+      fullPath: '/verify-reminders'
+      preLoaderRoute: typeof VerifyRemindersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reminders': {
       id: '/reminders'
       path: '/reminders'
@@ -213,6 +233,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
   RemindersRoute: RemindersRoute,
+  VerifyRemindersRoute: VerifyRemindersRoute,
   AuthShopifyRoute: AuthShopifyRouteWithChildren,
   ApiPublicHooksSaveRemindersRoute: ApiPublicHooksSaveRemindersRoute,
   ApiPublicHooksSyncKlaviyoRoute: ApiPublicHooksSyncKlaviyoRoute,
@@ -221,13 +242,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

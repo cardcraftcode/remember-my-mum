@@ -28,6 +28,12 @@ export type KlaviyoProfilePayload = {
   remindsChristmas?: boolean
   remindsMothersDay?: boolean
   consentTimestamp?: string | null
+  // Double opt-in state. `remindersVerified` is the boolean used by Klaviyo
+  // flows to decide whether reminder sends are allowed. `verificationUrl` is
+  // populated only while the customer has not yet clicked the confirmation
+  // link; a Klaviyo flow triggered on this property sends the confirmation email.
+  remindersVerified?: boolean
+  verificationUrl?: string | null
 }
 
 
@@ -107,6 +113,14 @@ export class KlaviyoClient {
       ;(attributes.properties as Record<string, unknown>).consent_timestamp =
         payload.consentTimestamp
     }
+    if (payload.remindersVerified !== undefined) {
+      ;(attributes.properties as Record<string, unknown>).reminders_verified =
+        payload.remindersVerified
+    }
+    if (payload.verificationUrl !== undefined) {
+      ;(attributes.properties as Record<string, unknown>).verification_url =
+        payload.verificationUrl
+    }
 
 
     if (payload.birthdays && payload.birthdays.length > 0) {
@@ -176,6 +190,14 @@ export class KlaviyoClient {
     if (payload.consentTimestamp) {
       ;(attributes.properties as Record<string, unknown>).consent_timestamp =
         payload.consentTimestamp
+    }
+    if (payload.remindersVerified !== undefined) {
+      ;(attributes.properties as Record<string, unknown>).reminders_verified =
+        payload.remindersVerified
+    }
+    if (payload.verificationUrl !== undefined) {
+      ;(attributes.properties as Record<string, unknown>).verification_url =
+        payload.verificationUrl
     }
 
 
