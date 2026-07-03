@@ -122,29 +122,52 @@ export async function upsertCustomerAndReminders(
     customer = inserted
   }
 
-  // Replace birthday rows when a birthdays array was supplied.
-  if (input.birthdays !== undefined) {
-    const { error: deleteError } = await supabaseAdmin
+  // Append birthday rows when a birthdays array was supplied. Each form
+  // submission adds new birthday reminders rather than replacing existing
+  // ones, so a shopper who buys a second gift for a different Mum keeps
+  // their earlier reminders. If a birthday for the same date already exists
+  // we merge in any new mum_variants instead of inserting a duplicate.
+  if (input.birthdays !== undefined && input.birthdays.length > 0) {
+    const { data: existingBirthdays, error: existingBirthdayErr } = await supabaseAdmin
       .from('reminders')
-      .delete()
+      .select('id, event_date, mum_variants')
       .eq('customer_id', customer.id)
       .eq('event_type', 'birthday')
 
-    if (deleteError) throw deleteError
+    if (existingBirthdayErr) throw existingBirthdayErr
 
-    if (input.birthdays.length > 0) {
-      const rows: Database['public']['Tables']['reminders']['Insert'][] =
-        input.birthdays.map((b) => ({
+    const existingByDate = new Map(
+      (existingBirthdays ?? []).map((r) => [r.event_date, r]),
+    )
+
+    const toInsert: Database['public']['Tables']['reminders']['Insert'][] = []
+
+    for (const b of input.birthdays) {
+      const existing = existingByDate.get(b.date)
+      if (existing) {
+        const merged = Array.from(
+          new Set([...(existing.mum_variants ?? []), ...b.mumVariants]),
+        )
+        const { error: mergeErr } = await supabaseAdmin
+          .from('reminders')
+          .update({ mum_variants: merged, enabled: true })
+          .eq('id', existing.id)
+        if (mergeErr) throw mergeErr
+      } else {
+        toInsert.push({
           customer_id: customer.id,
           event_type: 'birthday',
           event_date: b.date,
           enabled: true,
           mum_variants: b.mumVariants,
-        }))
+        })
+      }
+    }
 
+    if (toInsert.length > 0) {
       const { error: birthdayInsertError } = await supabaseAdmin
         .from('reminders')
-        .insert(rows)
+        .insert(toInsert)
 
       if (birthdayInsertError) throw birthdayInsertError
     }
@@ -164,7 +187,7 @@ export async function upsertCustomerAndReminders(
 
     const { data: existingReminder, error: existingErr } = await supabaseAdmin
       .from('reminders')
-      .select('id')
+      .select('id, enabled')
       .eq('customer_id', customer.id)
       .eq('event_type', entry.eventType)
       .maybeSingle()
@@ -172,19 +195,24 @@ export async function upsertCustomerAndReminders(
     if (existingErr) throw existingErr
 
     if (existingReminder) {
-      const { error: updateErr } = await supabaseAdmin
-        .from('reminders')
-        .update({ enabled: entry.enabled })
-        .eq('id', existingReminder.id)
-      if (updateErr) throw updateErr
-    } else {
+      // Additive: only ever turn a singleton ON from a checkout submission,
+      // never off. A shopper who previously opted in should keep that
+      // preference even if a later form ships with the box unchecked.
+      if (entry.enabled && !existingReminder.enabled) {
+        const { error: updateErr } = await supabaseAdmin
+          .from('reminders')
+          .update({ enabled: true })
+          .eq('id', existingReminder.id)
+        if (updateErr) throw updateErr
+      }
+    } else if (entry.enabled) {
       const { error: insertErr } = await supabaseAdmin
         .from('reminders')
         .insert({
           customer_id: customer.id,
           event_type: entry.eventType,
           event_date: null,
-          enabled: entry.enabled,
+          enabled: true,
         })
       if (insertErr) throw insertErr
     }
