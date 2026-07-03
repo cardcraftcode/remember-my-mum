@@ -68,6 +68,17 @@ function VerifyShell({ children }: { children: React.ReactNode }) {
 function VerifyPage() {
   const { token } = Route.useSearch()
 
+  const { data } = useSuspenseQuery(
+    queryOptions({
+      queryKey: ['verify-reminders', token ?? ''],
+      queryFn: async () => {
+        if (!token) return { ok: false as const }
+        return verifyReminders({ data: { token } })
+      },
+      staleTime: Infinity,
+    }),
+  )
+
   if (!token) {
     return (
       <VerifyShell>
@@ -78,14 +89,6 @@ function VerifyPage() {
       </VerifyShell>
     )
   }
-
-  const { data } = useSuspenseQuery(
-    queryOptions({
-      queryKey: ['verify-reminders', token],
-      queryFn: () => verifyReminders({ data: { token } }),
-      staleTime: Infinity,
-    }),
-  )
 
   if (!data.ok) {
     return (
