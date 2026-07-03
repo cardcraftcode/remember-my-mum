@@ -232,6 +232,45 @@ export class KlaviyoClient {
     }
   }
 
+  /**
+   * Sends a custom event to Klaviyo. Event-triggered flows are more reliable
+   * than profile-property-change triggers for transactional sends like
+   * confirmation emails.
+   */
+  async trackEvent(args: {
+    email: string
+    metricName: string
+    properties?: Record<string, unknown>
+    uniqueId?: string
+  }): Promise<void> {
+    const body = {
+      data: {
+        type: 'event',
+        attributes: {
+          properties: args.properties ?? {},
+          unique_id: args.uniqueId,
+          metric: {
+            data: {
+              type: 'metric',
+              attributes: { name: args.metricName },
+            },
+          },
+          profile: {
+            data: {
+              type: 'profile',
+              attributes: { email: args.email },
+            },
+          },
+        },
+      },
+    }
+
+    await this.request('/events/', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  }
+
   async logSync(
     customerId: string | null,
     action: string,
