@@ -140,7 +140,7 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
           claims = await verifyShopifySessionToken(token)
         } catch (error) {
           console.error('Shopify session token verification failed', error)
-          return new Response('Invalid session token', { status: 401 })
+          return textResponse('Invalid session token', 401)
         }
 
         // The Shopify session token's `sub` is the customer's GID.
@@ -149,31 +149,24 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
         // overwrite another customer's record by sending their email.
         const tokenCustomerId = claims.sub
         if (!tokenCustomerId) {
-          return new Response('Session token missing customer identity', {
-            status: 401,
-          })
+          return textResponse('Session token missing customer identity', 401)
         }
 
         let body: unknown
         try {
           body = await request.json()
         } catch {
-          return new Response('Invalid JSON body', { status: 400 })
+          return textResponse('Invalid JSON body', 400)
         }
 
         const parsed = ReminderPayloadSchema.safeParse(body)
         if (!parsed.success) {
-          return new Response(JSON.stringify(parsed.error.format()), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json' },
-          })
+          return jsonResponse(parsed.error.format(), { status: 400 })
         }
 
         const payload = parsed.data
 
         try {
-          // Ensure the email in the payload isn't already bound to a
-          // different Shopify customer.
           const supabaseUrl = process.env.SUPABASE_URL
           const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
           if (!supabaseUrl || !supabaseServiceRoleKey) {
@@ -199,9 +192,7 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
 
           if (lookupError) {
             console.error('Customer lookup failed', lookupError)
-            return new Response('Failed to save reminders. Please try again.', {
-              status: 500,
-            })
+            return textResponse('Failed to save reminders. Please try again.', 500)
           }
 
           if (
@@ -209,11 +200,9 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
             existing.shopify_customer_id &&
             existing.shopify_customer_id !== tokenCustomerId
           ) {
-            // Email belongs to a different Shopify customer — refuse.
-            return new Response('Forbidden', { status: 403 })
+            return textResponse('Forbidden', 403)
           }
 
-          // Derive canonical birthday list from either the new or legacy shape.
           let birthdayInput: Array<{ date: string; mumVariants: string[] }> = []
           if (payload.remindsBirthday === false) {
             birthdayInput = []
@@ -226,7 +215,6 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
           const result = await upsertCustomerAndReminders({
             email: payload.email,
             shopDomain: payload.shopDomain,
-            // Always derive from the verified token, never trust the client.
             shopifyCustomerId: tokenCustomerId,
             birthdays: birthdayInput,
             remindsChristmas: payload.remindsChristmas ?? false,
@@ -234,17 +222,14 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
             consentTimestamp: new Date(),
           })
 
-          return Response.json({
+          return jsonResponse({
             success: true,
             customerId: result.customer.id,
             reminders: result.reminders,
           })
         } catch (error) {
           console.error('Failed to save reminders', error)
-          return new Response(
-            'Failed to save reminders. Please try again.',
-            { status: 500 },
-          )
+          return textResponse('Failed to save reminders. Please try again.', 500)
         }
       },
     },
