@@ -69,7 +69,7 @@ function DashboardPage() {
         <div className="mx-auto max-w-md rounded-2xl bg-white p-8 shadow-sm">
           <h1 className="mb-2 text-2xl font-semibold text-gray-900">Manage your reminders</h1>
           <p className="mb-6 text-gray-600">
-            Sign in with your Shopify account to manage your Mum reminder preferences.
+            Sign in with your Shopify account to manage your&nbsp; reminder preferences.
           </p>
 
           {isGuestLoading && (
