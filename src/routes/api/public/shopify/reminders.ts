@@ -22,13 +22,115 @@ const ReminderPayloadSchema = z.object({
   remindsMothersDay: z.boolean().optional(),
 })
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Max-Age': '86400',
+}
+
+function jsonResponse(body: unknown, init?: ResponseInit) {
+  return new Response(JSON.stringify(body), {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...CORS_HEADERS,
+      ...(init?.headers ?? {}),
+    },
+  })
+}
+
+function textResponse(body: string, status: number) {
+  return new Response(body, { status, headers: { ...CORS_HEADERS } })
+}
+
 export const Route = createFileRoute('/api/public/shopify/reminders')({
   server: {
     handlers: {
+      OPTIONS: async () =>
+        new Response(null, { status: 204, headers: CORS_HEADERS }),
+
+      GET: async ({ request }) => {
+        const authHeader = request.headers.get('authorization')
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+          return textResponse('Missing session token', 401)
+        }
+        const token = authHeader.replace('Bearer ', '')
+
+        let claims: { iss: string; sub?: string }
+        try {
+          claims = await verifyShopifySessionToken(token)
+        } catch (error) {
+          console.error('Shopify session token verification failed', error)
+          return textResponse('Invalid session token', 401)
+        }
+        const tokenCustomerId = claims.sub
+        if (!tokenCustomerId) {
+          return textResponse('Session token missing customer identity', 401)
+        }
+
+        const supabaseUrl = process.env.SUPABASE_URL
+        const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+        if (!supabaseUrl || !supabaseServiceRoleKey) {
+          return textResponse('Server misconfigured', 500)
+        }
+        const admin = createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
+          auth: {
+            storage: undefined,
+            persistSession: false,
+            autoRefreshToken: false,
+          },
+        })
+
+        const { data: customer, error: customerError } = await admin
+          .from('reminder_customers')
+          .select('id, email')
+          .eq('shopify_customer_id', tokenCustomerId)
+          .maybeSingle()
+
+        if (customerError) {
+          console.error('Customer lookup failed', customerError)
+          return textResponse('Failed to load reminders', 500)
+        }
+
+        if (!customer) {
+          return jsonResponse({
+            birthdays: [],
+            remindsChristmas: false,
+            remindsMothersDay: false,
+          })
+        }
+
+        const { data: reminders, error: remindersError } = await admin
+          .from('reminders')
+          .select('event_type, event_date, enabled, mum_variants')
+          .eq('customer_id', customer.id)
+
+        if (remindersError) {
+          console.error('Reminders lookup failed', remindersError)
+          return textResponse('Failed to load reminders', 500)
+        }
+
+        const birthdays = (reminders ?? [])
+          .filter((r) => r.event_type === 'birthday' && r.enabled && r.event_date)
+          .map((r) => ({
+            date: r.event_date as string,
+            mumVariants: (r.mum_variants ?? []) as string[],
+          }))
+        const remindsChristmas = (reminders ?? []).some(
+          (r) => r.event_type === 'christmas' && r.enabled,
+        )
+        const remindsMothersDay = (reminders ?? []).some(
+          (r) => r.event_type === 'mothers_day' && r.enabled,
+        )
+
+        return jsonResponse({ birthdays, remindsChristmas, remindsMothersDay })
+      },
+
       POST: async ({ request }) => {
         const authHeader = request.headers.get('authorization')
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-          return new Response('Missing session token', { status: 401 })
+          return textResponse('Missing session token', 401)
         }
 
         const token = authHeader.replace('Bearer ', '')
