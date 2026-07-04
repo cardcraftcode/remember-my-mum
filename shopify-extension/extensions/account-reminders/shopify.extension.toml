@@ -1,0 +1,23 @@
+api_version = "2025-01"
+
+[[extensions]]
+name = "Reminders"
+handle = "account-reminders"
+type = "ui_extension"
+
+  [[extensions.targeting]]
+  module = "./src/ReminderPage.tsx"
+  target = "customer-account.page.render"
+
+  # Adds a "Reminders" link to the customer account menu that opens the
+  # full page rendered by the target above.
+  [[extensions.targeting]]
+  module = "./src/MenuLink.tsx"
+  target = "customer-account.order-index.block.render"
+
+  [extensions.settings]
+    [[extensions.settings.fields]]
+    key = "backend_url"
+    type = "single_line_text_field"
+    name = "Backend URL"
+    description = "Base URL of the Mum Reminders app (no trailing slash)"
