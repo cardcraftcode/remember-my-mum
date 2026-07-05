@@ -42,15 +42,7 @@ export type Database = {
           payload?: Json | null
           status?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "klaviyo_sync_log_customer_id_fkey"
-            columns: ["customer_id"]
-            isOneToOne: false
-            referencedRelation: "reminder_customers"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       reminder_customers: {
         Row: {
@@ -61,8 +53,6 @@ export type Database = {
           guest_token_version: number
           id: string
           klaviyo_profile_id: string | null
-          reminds_christmas: boolean
-          reminds_mothers_day: boolean
           shop_domain: string | null
           shopify_customer_id: string | null
           updated_at: string
@@ -78,8 +68,6 @@ export type Database = {
           guest_token_version?: number
           id?: string
           klaviyo_profile_id?: string | null
-          reminds_christmas?: boolean
-          reminds_mothers_day?: boolean
           shop_domain?: string | null
           shopify_customer_id?: string | null
           updated_at?: string
@@ -95,8 +83,6 @@ export type Database = {
           guest_token_version?: number
           id?: string
           klaviyo_profile_id?: string | null
-          reminds_christmas?: boolean
-          reminds_mothers_day?: boolean
           shop_domain?: string | null
           shopify_customer_id?: string | null
           updated_at?: string
@@ -106,36 +92,90 @@ export type Database = {
         }
         Relationships: []
       }
+      reminder_event_log: {
+        Row: {
+          customer_id: string
+          event_type: string
+          id: string
+          klaviyo_unique_id: string
+          next_occurrence: string | null
+          occasion: string
+          person_id: string
+          sent_at: string
+        }
+        Insert: {
+          customer_id: string
+          event_type: string
+          id?: string
+          klaviyo_unique_id: string
+          next_occurrence?: string | null
+          occasion: string
+          person_id: string
+          sent_at?: string
+        }
+        Update: {
+          customer_id?: string
+          event_type?: string
+          id?: string
+          klaviyo_unique_id?: string
+          next_occurrence?: string | null
+          occasion?: string
+          person_id?: string
+          sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reminder_event_log_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "reminder_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reminder_event_log_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "reminder_people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reminder_people: {
         Row: {
           created_at: string
           customer_id: string
           date_of_birth: string
           id: string
-          mum_variants: string[]
           name: string
           reminds_birthday: boolean
+          reminds_christmas: boolean
+          reminds_mothers_day: boolean
           updated_at: string
+          variant: string
         }
         Insert: {
           created_at?: string
           customer_id: string
           date_of_birth: string
           id?: string
-          mum_variants?: string[]
           name: string
           reminds_birthday?: boolean
+          reminds_christmas?: boolean
+          reminds_mothers_day?: boolean
           updated_at?: string
+          variant?: string
         }
         Update: {
           created_at?: string
           customer_id?: string
           date_of_birth?: string
           id?: string
-          mum_variants?: string[]
           name?: string
           reminds_birthday?: boolean
+          reminds_christmas?: boolean
+          reminds_mothers_day?: boolean
           updated_at?: string
+          variant?: string
         }
         Relationships: [
           {
