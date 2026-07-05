@@ -35,6 +35,7 @@ function emptyPerson(): PersonEntry {
 function RemindersPage() {
   const [email, setEmail] = useState('')
   const [people, setPeople] = useState<PersonEntry[]>([emptyPerson()])
+  const [expanded, setExpanded] = useState<boolean[]>([false])
   const [remindsChristmas, setRemindsChristmas] = useState(true)
   const [remindsMothersDay, setRemindsMothersDay] = useState(true)
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
@@ -56,9 +57,19 @@ function RemindersPage() {
     )
   }
 
-  const addPerson = () => setPeople((prev) => [...prev, emptyPerson()])
-  const removePerson = (index: number) =>
+  const expandPerson = (index: number) => {
+    setExpanded((prev) => prev.map((open, i) => (i === index ? true : open)))
+  }
+
+  const addPerson = () => {
+    setPeople((prev) => [...prev, emptyPerson()])
+    setExpanded((prev) => [...prev, true])
+  }
+
+  const removePerson = (index: number) => {
     setPeople((prev) => prev.filter((_, i) => i !== index))
+    setExpanded((prev) => prev.filter((_, i) => i !== index))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
