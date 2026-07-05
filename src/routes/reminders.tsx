@@ -228,16 +228,32 @@ function RemindersPage() {
 function PersonCard({
   person,
   index,
+  expanded,
+  onExpand,
   onChange,
   onToggleVariant,
   onRemove,
 }: {
   person: PersonEntry
   index: number
+  expanded: boolean
+  onExpand: () => void
   onChange: (patch: Partial<PersonEntry>) => void
   onToggleVariant: (variant: string, checked: boolean) => void
   onRemove?: () => void
 }) {
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={onExpand}
+        className="w-full rounded-lg border border-dashed border-pink-400 px-4 py-3 text-sm font-medium text-pink-600 hover:bg-pink-50"
+      >
+        {index === 0 ? 'Set a birthday reminder' : `Person ${index + 1}`}
+      </button>
+    )
+  }
+
   return (
     <div className="rounded-lg border border-gray-200 bg-pink-50/40 p-4">
       <div className="flex items-center justify-between">
