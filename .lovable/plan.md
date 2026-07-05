@@ -1,93 +1,71 @@
-# Reminders schema v2 — per-person, per-occasion events
+# Add "Reminder Due In 14 Days" and "Reminder Due In 7 Days" events
 
-## Form (clean rebuild)
+## Current state
+Klaviyo events emitted today:
+- `Reminder Created` (save + yearly re-emit)
+- `Reminder Cancelled` (remove/untick)
+- `Reminders Verification Requested`
 
-1. **Your email**
-2. **Person 1 card** (collapsed by default, "Set a reminder" button to expand)
-   - Who is the reminder for? *(text)*
-   - What is she known as? *(single-select dropdown of MUM_VARIANTS)*
-   - Reminder about: **Birthday**, **Christmas**, **Mother's Day** *(three checkboxes, all on by default)*
-   - When was she born? *(DD-MM-YYYY, full date required — shown only when Birthday is ticked)*
-3. **+ Add another person** (existing dashed-button styling)
-4. **Set reminders**
+No due-window events. Any 14/7-day timing would have to live inside Klaviyo flows via "Wait until `next_occurrence` − N days".
 
-Christmas/Mother's Day become per-person (removed from the account-level checkboxes at the bottom).
+## Proposal
+Emit two new metrics from a dedicated cron:
+- `Reminder Due In 14 Days`
+- `Reminder Due In 7 Days`
 
-## Database (clean slate — drop old tables, recreate)
+One per person × active occasion × year, idempotent via `klaviyo_unique_id`.
 
-- `reminder_customers`: `id`, `email` (unique), `shop_domain`, `shopify_customer_id`, `klaviyo_profile_id`, `verified_at`, `verification_token`, `verification_sent_at`, `consent_timestamp`, timestamps.  
-  Removes `reminds_christmas` / `reminds_mothers_day` — now per-person.
-- `reminder_people`: `id`, `customer_id`, `name`, `date_of_birth` (date, required), `variant` (text, single value), `reminds_birthday` bool, `reminds_christmas` bool, `reminds_mothers_day` bool, timestamps.
-- `reminder_event_log`: `id`, `customer_id`, `person_id`, `occasion` ('birthday'|'christmas'|'mothers_day'), `event_type` ('created'|'cancelled'), `next_occurrence` date, `klaviyo_unique_id` (unique), `sent_at`. Used for dedupe and to know what to cancel/re-emit.
+## New cron route
+`src/routes/api/public/hooks/due-reminders.ts` — auth via `apikey` header (same pattern as `yearly-reemit`).
 
-RLS + GRANTs as before (authenticated own-row, service_role all).
+For each verified customer × person × active occasion (birthday/christmas/mothers_day):
+1. Compute `next_occurrence` via `nextOccurrenceFor`.
+2. `days_until = next_occurrence − today` (whole days, UTC).
+3. If `days_until == 14` → emit `Reminder Due In 14 Days`.
+4. If `days_until == 7`  → emit `Reminder Due In 7 Days`.
+5. Insert into `reminder_event_log` with `event_type = 'due_14' | 'due_7'` and `klaviyo_unique_id = due{14|7}-<personId>-<occasion>-<year>`.
+6. Before emitting, check the log for that same `klaviyo_unique_id` — skip if present (safe re-runs).
 
-## Klaviyo payloads
-
-**Profile** (upsert on save/verify):
-```json
-{ "email": "...", "properties": {
-    "reminder_source": "momcards_reminders",
-    "reminders_verified": true,
-    "people_count": 2
-}}
+### Event payload
 ```
-
-**Reminder Created** (one per person × ticked occasion, only after verification):
-```json
-{ "event": "Reminder Created",
-  "customer_properties": { "email": "..." },
-  "properties": {
-    "person_name": "Jane",
-    "occasion": "birthday",
-    "variant": "Mum",
-    "next_occurrence": "2026-06-12"
-  }}
+{ person_name, occasion, variant, next_occurrence, days_until: 14 | 7 }
 ```
-`unique_id = "created-<person_id>-<occasion>-<year>"` for dedupe.
+Profile is `email`; `unique_id` guarantees Klaviyo-side dedupe too.
 
-**Reminder Cancelled** (fired when a person is deleted, or an occasion is unticked on save):
-```json
-{ "event": "Reminder Cancelled",
-  "customer_properties": { "email": "..." },
-  "properties": { "person_name": "Jane", "occasion": "christmas", "variant": "Mum" }}
+### DB
+No schema change. `reminder_event_log.event_type` has no CHECK constraint, so `'due_14'` / `'due_7'` slot in.
+
+## pg_cron — every 2 minutes (testing)
+Scheduled via `supabase--insert` (not migration), body `{}`, POSTing to the stable prod URL:
+```sql
+select cron.schedule(
+  'due-reminders-test',
+  '*/2 * * * *',
+  $$ select net.http_post(
+       url:='https://project--650a08ee-6644-4279-8bb5-d8d767d35ea1.lovable.app/api/public/hooks/due-reminders',
+       headers:='{"Content-Type":"application/json","apikey":"<SUPABASE_PUBLISHABLE_KEY>"}'::jsonb,
+       body:='{}'::jsonb
+     ); $$
+);
 ```
+Switch to `'0 2 * * *'` and rename the job (`due-reminders`) once testing is done — I'll drop a one-liner in the plan follow-up.
 
-## Flow on save
+## Testing question — please confirm one
+Because the emit condition is a **strict day-window match** (exactly 14 or 7 days out), running every 2 minutes won't actually fire events unless you seed a person whose `next_occurrence` happens to land on today+14 or today+7. Two ways to make testing tractable:
 
-1. Validate + upsert customer/people. Diff old vs new to determine created/cancelled reminders.
-2. Upsert Klaviyo profile with people_count.
-3. If unverified → send verification event (existing "Reminders Verification Requested" metric), no created events yet.
-4. If verified → emit Reminder Created for each new (person, occasion) and Reminder Cancelled for each removed one. Log to `reminder_event_log`.
-5. On verify-link click → mark verified, then emit Reminder Created for all current reminders.
+**A. Seeded fixtures (recommended, no code changes):**
+Add a test person with `date_of_birth` set so today's next birthday is exactly 14 days away (or 7). The cron then emits on the next tick; the second tick is a dedup no-op.
 
-## Yearly re-emit (pg_cron)
+**B. Test-mode override in the route:**
+Accept `?force=1` (or a request body flag) that ignores the day-window and emits for every active person/occasion using a synthetic `unique_id` (e.g. suffixed with the current timestamp). Easy to trigger from `invoke-server-function`; you don't need pg_cron to hit it at all for exercising the code path.
 
-New public route `POST /api/public/hooks/yearly-reemit` protected by `apikey` header:
-- For every verified customer × person × ticked occasion where the previous `next_occurrence` has passed, compute the new `next_occurrence` and emit a fresh Reminder Created event with a new `unique_id` (`created-<person>-<occasion>-<year>`).
-- Scheduled daily at 01:00 UTC; the query only picks up rows whose last event is in the past, so it's idempotent.
-- `birthday` → next anniversary of DOB. `christmas` → next Dec 25. `mothers_day` → `ukMothersDay(year)`.
+Which do you want — A, B, or both?
 
-## Downstream updates
+## Files
+- **Create** `src/routes/api/public/hooks/due-reminders.ts`
+- **Schedule** pg_cron job via `supabase--insert` after route deploys
+- No other files touched.
 
-- **Checkout extension** (`mum-reminders/Checkout.tsx`): switch to single-variant dropdown, per-person occasion checkboxes, full DOB.
-- **Account extension** (`account-reminders/ReminderPage.tsx`): same shape as the web form.
-- **save-reminders / shopify/reminders** hooks: accept new payload shape (`people: [{ name, dateOfBirth, variant, remindsBirthday, remindsChristmas, remindsMothersDay }]`, no top-level occasion flags).
-- **send-birthday-events cron**: retire — replaced by yearly-reemit + Klaviyo flow delays.
-- **sync-klaviyo**: keep, updated to new profile shape.
-- **Dashboard**: update to show per-person occasion badges.
-
-## Issues worth flagging
-
-1. **Klaviyo flow delays run from event timestamp**, not from `next_occurrence`. Flows must use "Wait until date property = `next_occurrence` minus 14 days" — a standard Klaviyo action, but worth confirming your flows will be built that way. If flows use fixed "wait N days after event," `next_occurrence` is only useful for segmentation.
-2. **Cancelled reminders don't stop already-running Klaviyo flows.** Klaviyo flows are per-profile; a Reminder Cancelled event can be used as a *Trigger Filter / Skip step*, but existing flow recipients continue unless the flow explicitly checks for a matching cancel event. Your flow design needs a "skip if cancelled event received for same person+occasion since trigger" filter.
-3. **Verification-first means no events fire until they click.** Same as today — unverified customers generate no `Reminder Created` events. Confirmed by "keep verification."
-4. **DOB required** removes the DD/MM-only checkout ergonomics; the checkout extension currently accepts DD/MM. This will slightly increase checkout friction — acceptable per your answer.
-5. **`variant` becomes single-value**: existing data (multi-variant arrays) is dropped as part of the clean slate. Confirmed.
-
-## Technical notes
-
-- New DB migration drops `reminder_customers` and `reminder_people` and recreates them with the new shape (no data preserved, per "clean slate"). New `reminder_event_log` table for dedupe/cancel tracking.
-- Diffing on save: load existing `reminder_people` + latest per-(person,occasion) rows from `reminder_event_log`, compare against submitted payload, produce two lists (created, cancelled).
-- Yearly-reemit route reuses `nextBirthday` and `ukMothersDay` from `dates.server.ts`; adds a `nextChristmas(year)` helper.
-- pg_cron schedule set via `supabase--insert` after the route is live, calling the stable `project--<id>.lovable.app` URL with the anon `apikey` header.
+## Not changed
+- `Reminder Created` still fires on save (drives profile props + is a useful Klaviyo trigger).
+- `Reminder Cancelled` still fires; flows on the new due events should filter "no Cancelled since".

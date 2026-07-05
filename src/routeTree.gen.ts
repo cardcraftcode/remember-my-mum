@@ -19,6 +19,7 @@ import { Route as ApiPublicShopifyRemindersRouteImport } from './routes/api/publ
 import { Route as ApiPublicHooksYearlyReemitRouteImport } from './routes/api/public/hooks/yearly-reemit'
 import { Route as ApiPublicHooksSyncKlaviyoRouteImport } from './routes/api/public/hooks/sync-klaviyo'
 import { Route as ApiPublicHooksSaveRemindersRouteImport } from './routes/api/public/hooks/save-reminders'
+import { Route as ApiPublicHooksDueRemindersRouteImport } from './routes/api/public/hooks/due-reminders'
 
 const VerifyRemindersRoute = VerifyRemindersRouteImport.update({
   id: '/verify-reminders',
@@ -74,6 +75,12 @@ const ApiPublicHooksSaveRemindersRoute =
     path: '/api/public/hooks/save-reminders',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksDueRemindersRoute =
+  ApiPublicHooksDueRemindersRouteImport.update({
+    id: '/api/public/hooks/due-reminders',
+    path: '/api/public/hooks/due-reminders',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -82,6 +89,7 @@ export interface FileRoutesByFullPath {
   '/verify-reminders': typeof VerifyRemindersRoute
   '/auth/shopify': typeof AuthShopifyRouteWithChildren
   '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
+  '/api/public/hooks/due-reminders': typeof ApiPublicHooksDueRemindersRoute
   '/api/public/hooks/save-reminders': typeof ApiPublicHooksSaveRemindersRoute
   '/api/public/hooks/sync-klaviyo': typeof ApiPublicHooksSyncKlaviyoRoute
   '/api/public/hooks/yearly-reemit': typeof ApiPublicHooksYearlyReemitRoute
@@ -94,6 +102,7 @@ export interface FileRoutesByTo {
   '/verify-reminders': typeof VerifyRemindersRoute
   '/auth/shopify': typeof AuthShopifyRouteWithChildren
   '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
+  '/api/public/hooks/due-reminders': typeof ApiPublicHooksDueRemindersRoute
   '/api/public/hooks/save-reminders': typeof ApiPublicHooksSaveRemindersRoute
   '/api/public/hooks/sync-klaviyo': typeof ApiPublicHooksSyncKlaviyoRoute
   '/api/public/hooks/yearly-reemit': typeof ApiPublicHooksYearlyReemitRoute
@@ -107,6 +116,7 @@ export interface FileRoutesById {
   '/verify-reminders': typeof VerifyRemindersRoute
   '/auth/shopify': typeof AuthShopifyRouteWithChildren
   '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
+  '/api/public/hooks/due-reminders': typeof ApiPublicHooksDueRemindersRoute
   '/api/public/hooks/save-reminders': typeof ApiPublicHooksSaveRemindersRoute
   '/api/public/hooks/sync-klaviyo': typeof ApiPublicHooksSyncKlaviyoRoute
   '/api/public/hooks/yearly-reemit': typeof ApiPublicHooksYearlyReemitRoute
@@ -121,6 +131,7 @@ export interface FileRouteTypes {
     | '/verify-reminders'
     | '/auth/shopify'
     | '/auth/shopify/callback'
+    | '/api/public/hooks/due-reminders'
     | '/api/public/hooks/save-reminders'
     | '/api/public/hooks/sync-klaviyo'
     | '/api/public/hooks/yearly-reemit'
@@ -133,6 +144,7 @@ export interface FileRouteTypes {
     | '/verify-reminders'
     | '/auth/shopify'
     | '/auth/shopify/callback'
+    | '/api/public/hooks/due-reminders'
     | '/api/public/hooks/save-reminders'
     | '/api/public/hooks/sync-klaviyo'
     | '/api/public/hooks/yearly-reemit'
@@ -145,6 +157,7 @@ export interface FileRouteTypes {
     | '/verify-reminders'
     | '/auth/shopify'
     | '/auth/shopify/callback'
+    | '/api/public/hooks/due-reminders'
     | '/api/public/hooks/save-reminders'
     | '/api/public/hooks/sync-klaviyo'
     | '/api/public/hooks/yearly-reemit'
@@ -157,6 +170,7 @@ export interface RootRouteChildren {
   RemindersRoute: typeof RemindersRoute
   VerifyRemindersRoute: typeof VerifyRemindersRoute
   AuthShopifyRoute: typeof AuthShopifyRouteWithChildren
+  ApiPublicHooksDueRemindersRoute: typeof ApiPublicHooksDueRemindersRoute
   ApiPublicHooksSaveRemindersRoute: typeof ApiPublicHooksSaveRemindersRoute
   ApiPublicHooksSyncKlaviyoRoute: typeof ApiPublicHooksSyncKlaviyoRoute
   ApiPublicHooksYearlyReemitRoute: typeof ApiPublicHooksYearlyReemitRoute
@@ -235,6 +249,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksSaveRemindersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/due-reminders': {
+      id: '/api/public/hooks/due-reminders'
+      path: '/api/public/hooks/due-reminders'
+      fullPath: '/api/public/hooks/due-reminders'
+      preLoaderRoute: typeof ApiPublicHooksDueRemindersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -256,6 +277,7 @@ const rootRouteChildren: RootRouteChildren = {
   RemindersRoute: RemindersRoute,
   VerifyRemindersRoute: VerifyRemindersRoute,
   AuthShopifyRoute: AuthShopifyRouteWithChildren,
+  ApiPublicHooksDueRemindersRoute: ApiPublicHooksDueRemindersRoute,
   ApiPublicHooksSaveRemindersRoute: ApiPublicHooksSaveRemindersRoute,
   ApiPublicHooksSyncKlaviyoRoute: ApiPublicHooksSyncKlaviyoRoute,
   ApiPublicHooksYearlyReemitRoute: ApiPublicHooksYearlyReemitRoute,
