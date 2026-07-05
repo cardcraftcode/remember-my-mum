@@ -16,8 +16,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthShopifyRouteImport } from './routes/auth/shopify'
 import { Route as AuthShopifyCallbackRouteImport } from './routes/auth/shopify/callback'
 import { Route as ApiPublicShopifyRemindersRouteImport } from './routes/api/public/shopify/reminders'
+import { Route as ApiPublicHooksYearlyReemitRouteImport } from './routes/api/public/hooks/yearly-reemit'
 import { Route as ApiPublicHooksSyncKlaviyoRouteImport } from './routes/api/public/hooks/sync-klaviyo'
-import { Route as ApiPublicHooksSendBirthdayEventsRouteImport } from './routes/api/public/hooks/send-birthday-events'
 import { Route as ApiPublicHooksSaveRemindersRouteImport } from './routes/api/public/hooks/save-reminders'
 
 const VerifyRemindersRoute = VerifyRemindersRouteImport.update({
@@ -56,16 +56,16 @@ const ApiPublicShopifyRemindersRoute =
     path: '/api/public/shopify/reminders',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksYearlyReemitRoute =
+  ApiPublicHooksYearlyReemitRouteImport.update({
+    id: '/api/public/hooks/yearly-reemit',
+    path: '/api/public/hooks/yearly-reemit',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksSyncKlaviyoRoute =
   ApiPublicHooksSyncKlaviyoRouteImport.update({
     id: '/api/public/hooks/sync-klaviyo',
     path: '/api/public/hooks/sync-klaviyo',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicHooksSendBirthdayEventsRoute =
-  ApiPublicHooksSendBirthdayEventsRouteImport.update({
-    id: '/api/public/hooks/send-birthday-events',
-    path: '/api/public/hooks/send-birthday-events',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiPublicHooksSaveRemindersRoute =
@@ -83,8 +83,8 @@ export interface FileRoutesByFullPath {
   '/auth/shopify': typeof AuthShopifyRouteWithChildren
   '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
   '/api/public/hooks/save-reminders': typeof ApiPublicHooksSaveRemindersRoute
-  '/api/public/hooks/send-birthday-events': typeof ApiPublicHooksSendBirthdayEventsRoute
   '/api/public/hooks/sync-klaviyo': typeof ApiPublicHooksSyncKlaviyoRoute
+  '/api/public/hooks/yearly-reemit': typeof ApiPublicHooksYearlyReemitRoute
   '/api/public/shopify/reminders': typeof ApiPublicShopifyRemindersRoute
 }
 export interface FileRoutesByTo {
@@ -95,8 +95,8 @@ export interface FileRoutesByTo {
   '/auth/shopify': typeof AuthShopifyRouteWithChildren
   '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
   '/api/public/hooks/save-reminders': typeof ApiPublicHooksSaveRemindersRoute
-  '/api/public/hooks/send-birthday-events': typeof ApiPublicHooksSendBirthdayEventsRoute
   '/api/public/hooks/sync-klaviyo': typeof ApiPublicHooksSyncKlaviyoRoute
+  '/api/public/hooks/yearly-reemit': typeof ApiPublicHooksYearlyReemitRoute
   '/api/public/shopify/reminders': typeof ApiPublicShopifyRemindersRoute
 }
 export interface FileRoutesById {
@@ -108,8 +108,8 @@ export interface FileRoutesById {
   '/auth/shopify': typeof AuthShopifyRouteWithChildren
   '/auth/shopify/callback': typeof AuthShopifyCallbackRoute
   '/api/public/hooks/save-reminders': typeof ApiPublicHooksSaveRemindersRoute
-  '/api/public/hooks/send-birthday-events': typeof ApiPublicHooksSendBirthdayEventsRoute
   '/api/public/hooks/sync-klaviyo': typeof ApiPublicHooksSyncKlaviyoRoute
+  '/api/public/hooks/yearly-reemit': typeof ApiPublicHooksYearlyReemitRoute
   '/api/public/shopify/reminders': typeof ApiPublicShopifyRemindersRoute
 }
 export interface FileRouteTypes {
@@ -122,8 +122,8 @@ export interface FileRouteTypes {
     | '/auth/shopify'
     | '/auth/shopify/callback'
     | '/api/public/hooks/save-reminders'
-    | '/api/public/hooks/send-birthday-events'
     | '/api/public/hooks/sync-klaviyo'
+    | '/api/public/hooks/yearly-reemit'
     | '/api/public/shopify/reminders'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -134,8 +134,8 @@ export interface FileRouteTypes {
     | '/auth/shopify'
     | '/auth/shopify/callback'
     | '/api/public/hooks/save-reminders'
-    | '/api/public/hooks/send-birthday-events'
     | '/api/public/hooks/sync-klaviyo'
+    | '/api/public/hooks/yearly-reemit'
     | '/api/public/shopify/reminders'
   id:
     | '__root__'
@@ -146,8 +146,8 @@ export interface FileRouteTypes {
     | '/auth/shopify'
     | '/auth/shopify/callback'
     | '/api/public/hooks/save-reminders'
-    | '/api/public/hooks/send-birthday-events'
     | '/api/public/hooks/sync-klaviyo'
+    | '/api/public/hooks/yearly-reemit'
     | '/api/public/shopify/reminders'
   fileRoutesById: FileRoutesById
 }
@@ -158,8 +158,8 @@ export interface RootRouteChildren {
   VerifyRemindersRoute: typeof VerifyRemindersRoute
   AuthShopifyRoute: typeof AuthShopifyRouteWithChildren
   ApiPublicHooksSaveRemindersRoute: typeof ApiPublicHooksSaveRemindersRoute
-  ApiPublicHooksSendBirthdayEventsRoute: typeof ApiPublicHooksSendBirthdayEventsRoute
   ApiPublicHooksSyncKlaviyoRoute: typeof ApiPublicHooksSyncKlaviyoRoute
+  ApiPublicHooksYearlyReemitRoute: typeof ApiPublicHooksYearlyReemitRoute
   ApiPublicShopifyRemindersRoute: typeof ApiPublicShopifyRemindersRoute
 }
 
@@ -214,18 +214,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicShopifyRemindersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/yearly-reemit': {
+      id: '/api/public/hooks/yearly-reemit'
+      path: '/api/public/hooks/yearly-reemit'
+      fullPath: '/api/public/hooks/yearly-reemit'
+      preLoaderRoute: typeof ApiPublicHooksYearlyReemitRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/sync-klaviyo': {
       id: '/api/public/hooks/sync-klaviyo'
       path: '/api/public/hooks/sync-klaviyo'
       fullPath: '/api/public/hooks/sync-klaviyo'
       preLoaderRoute: typeof ApiPublicHooksSyncKlaviyoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/send-birthday-events': {
-      id: '/api/public/hooks/send-birthday-events'
-      path: '/api/public/hooks/send-birthday-events'
-      fullPath: '/api/public/hooks/send-birthday-events'
-      preLoaderRoute: typeof ApiPublicHooksSendBirthdayEventsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/save-reminders': {
@@ -257,20 +257,10 @@ const rootRouteChildren: RootRouteChildren = {
   VerifyRemindersRoute: VerifyRemindersRoute,
   AuthShopifyRoute: AuthShopifyRouteWithChildren,
   ApiPublicHooksSaveRemindersRoute: ApiPublicHooksSaveRemindersRoute,
-  ApiPublicHooksSendBirthdayEventsRoute: ApiPublicHooksSendBirthdayEventsRoute,
   ApiPublicHooksSyncKlaviyoRoute: ApiPublicHooksSyncKlaviyoRoute,
+  ApiPublicHooksYearlyReemitRoute: ApiPublicHooksYearlyReemitRoute,
   ApiPublicShopifyRemindersRoute: ApiPublicShopifyRemindersRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

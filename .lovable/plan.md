@@ -1,122 +1,93 @@
+# Reminders schema v2 — per-person, per-occasion events
 
-## Goal
+## Form (clean rebuild)
 
-Switch from an event-row model (birthday / christmas / mothers_day rows) to a **people** list. Each person is one row the user manages by name. Christmas and Mother's Day stay as **account-level** toggles.
+1. **Your email**
+2. **Person 1 card** (collapsed by default, "Set a reminder" button to expand)
+   - Who is the reminder for? *(text)*
+   - What is she known as? *(single-select dropdown of MUM_VARIANTS)*
+   - Reminder about: **Birthday**, **Christmas**, **Mother's Day** *(three checkboxes, all on by default)*
+   - When was she born? *(DD-MM-YYYY, full date required — shown only when Birthday is ticked)*
+3. **+ Add another person** (existing dashed-button styling)
+4. **Set reminders**
 
-## New data model
+Christmas/Mother's Day become per-person (removed from the account-level checkboxes at the bottom).
 
-Two tables, replacing `reminders` and `reminder_customers` entirely.
+## Database (clean slate — drop old tables, recreate)
 
-```text
-reminder_customers          (mostly as today, minus the singletons)
-├─ id, email, auth_user_id, shopify_customer_id, shop_domain
-├─ klaviyo_profile_id, consent_timestamp, verified_at, verification_token…
-├─ reminds_christmas     boolean  default true   ← moved onto the customer
-└─ reminds_mothers_day   boolean  default true   ← moved onto the customer
+- `reminder_customers`: `id`, `email` (unique), `shop_domain`, `shopify_customer_id`, `klaviyo_profile_id`, `verified_at`, `verification_token`, `verification_sent_at`, `consent_timestamp`, timestamps.  
+  Removes `reminds_christmas` / `reminds_mothers_day` — now per-person.
+- `reminder_people`: `id`, `customer_id`, `name`, `date_of_birth` (date, required), `variant` (text, single value), `reminds_birthday` bool, `reminds_christmas` bool, `reminds_mothers_day` bool, timestamps.
+- `reminder_event_log`: `id`, `customer_id`, `person_id`, `occasion` ('birthday'|'christmas'|'mothers_day'), `event_type` ('created'|'cancelled'), `next_occurrence` date, `klaviyo_unique_id` (unique), `sent_at`. Used for dedupe and to know what to cancel/re-emit.
 
-reminder_people
-├─ id, customer_id (fk)
-├─ name              text  not null        ← user-supplied identifier ("Mum", "Nana Rose")
-├─ date_of_birth     date  not null
-├─ mum_variants      text[] not null default '{}'
-├─ reminds_birthday  boolean not null default true
-├─ created_at, updated_at
+RLS + GRANTs as before (authenticated own-row, service_role all).
+
+## Klaviyo payloads
+
+**Profile** (upsert on save/verify):
+```json
+{ "email": "...", "properties": {
+    "reminder_source": "momcards_reminders",
+    "reminders_verified": true,
+    "people_count": 2
+}}
 ```
 
-- Person is the unit the UI edits/deletes.
-- Birthday opt-in lives per-person (so you can silence one without deleting).
-- Christmas / Mother's Day are single account toggles, rendered above/below the list.
+**Reminder Created** (one per person × ticked occasion, only after verification):
+```json
+{ "event": "Reminder Created",
+  "customer_properties": { "email": "..." },
+  "properties": {
+    "person_name": "Jane",
+    "occasion": "birthday",
+    "variant": "Mum",
+    "next_occurrence": "2026-06-12"
+  }}
+```
+`unique_id = "created-<person_id>-<occasion>-<year>"` for dedupe.
 
-Old `reminders` table + `event_type` enum are dropped. Clean slate — no data migration.
-
-## UI: `/reminders` (create) and `/dashboard` (manage)
-
-Both pages share a single "person editor" component.
-
-- `/reminders` (public/checkout landing): email + a list of people (starts with one blank card) + two account toggles + **Set reminders** button.
-- `/dashboard` (signed-in): shows the list of saved people as cards with Edit / Delete, an **Add person** button, and the two account toggles which save on change. Adding a new person opens the same editor inline; Save button says "Set reminders" for new, "Save changes" for existing.
-
-Each person card shows:
-- Name (text input, required)
-- Date of birth (date input, required)
-- Variants (checkbox grid from `MUM_VARIANTS`)
-- Birthday reminder toggle (default on)
-
-Account section (once per page):
-- Mother's Day reminder (default on)
-- Christmas reminder (default on)
-
-Design keeps the current pink/white shadcn-ish look — no visual redesign in scope.
-
-## Server functions & endpoints
-
-Rewritten around people, not events.
-
-- `src/lib/reminders.functions.ts`
-  - `getDashboardData()` → `{ customer, people }`
-  - `createPerson({ name, dateOfBirth, mumVariants, remindsBirthday })`
-  - `updatePerson({ id, … })`
-  - `deletePerson({ id })`
-  - `updateAccountReminders({ remindsChristmas, remindsMothersDay })`
-- `src/lib/reminders.server.ts` — `upsertCustomerAndPeople(...)` replaces `upsertCustomerAndReminders`. Checkout / save-reminders hook append a person rather than a birthday row.
-- `src/routes/api/public/shopify/reminders.ts` (headless account extension) — GET returns `{ people, remindsChristmas, remindsMothersDay }`; POST accepts the same shape.
-- `src/routes/api/public/hooks/save-reminders.ts` — accept `people: [{ name, dateOfBirth, mumVariants }]` (still one person from the current checkout form, but shape is future-proof).
-
-## Checkout & account extensions
-
-- `shopify-extension/extensions/mum-reminders/src/Checkout.tsx`: add a **Name** field to the existing single-person form; submit as one person.
-- `shopify-extension/extensions/account-reminders/src/ReminderPage.tsx`: replace single-birthday UI with the same people-list editor (add / edit / delete), plus the two account toggles.
-
-## Klaviyo payload
-
-`buildKlaviyoPayload` becomes:
-
-```ts
-{
-  email, shopDomain, shopifyCustomerId,
-  people: [{ name, dateOfBirth, next, mumVariants, remindsBirthday }],
-  peopleCount,
-  remindsChristmas, remindsMothersDay,
-  remindersVerified, verificationUrl, consentTimestamp,
-}
+**Reminder Cancelled** (fired when a person is deleted, or an occasion is unticked on save):
+```json
+{ "event": "Reminder Cancelled",
+  "customer_properties": { "email": "..." },
+  "properties": { "person_name": "Jane", "occasion": "christmas", "variant": "Mum" }}
 ```
 
-The old `mumBirthday` / `mumBirthdayNext` / `birthdays` top-level fields are removed — Klaviyo flows that referenced them need to switch to the per-event pattern below.
+## Flow on save
 
-## Birthday cron
+1. Validate + upsert customer/people. Diff old vs new to determine created/cancelled reminders.
+2. Upsert Klaviyo profile with people_count.
+3. If unverified → send verification event (existing "Reminders Verification Requested" metric), no created events yet.
+4. If verified → emit Reminder Created for each new (person, occasion) and Reminder Cancelled for each removed one. Log to `reminder_event_log`.
+5. On verify-link click → mark verified, then emit Reminder Created for all current reminders.
 
-`src/routes/api/public/hooks/send-birthday-events.ts` iterates `reminder_people` where `reminds_birthday = true` and DOB matches `today + leadDays`, and fires one `Birthday Reminder Due` Klaviyo event per person, with properties:
+## Yearly re-emit (pg_cron)
 
-```ts
-{ personName, birthdayDate, mumVariant: mum_variants[0], mumVariants, personId }
-```
+New public route `POST /api/public/hooks/yearly-reemit` protected by `apikey` header:
+- For every verified customer × person × ticked occasion where the previous `next_occurrence` has passed, compute the new `next_occurrence` and emit a fresh Reminder Created event with a new `unique_id` (`created-<person>-<occasion>-<year>`).
+- Scheduled daily at 01:00 UTC; the query only picks up rows whose last event is in the past, so it's idempotent.
+- `birthday` → next anniversary of DOB. `christmas` → next Dec 25. `mothers_day` → `ukMothersDay(year)`.
 
-`uniqueId: `birthday-${person.id}-${year}`` for idempotency. Templates use `{{ event.personName }}` and `{{ event.mumVariant }}` — this is what makes multi-birthday reminders finally work correctly.
+## Downstream updates
 
-## Migration plan (one migration)
+- **Checkout extension** (`mum-reminders/Checkout.tsx`): switch to single-variant dropdown, per-person occasion checkboxes, full DOB.
+- **Account extension** (`account-reminders/ReminderPage.tsx`): same shape as the web form.
+- **save-reminders / shopify/reminders** hooks: accept new payload shape (`people: [{ name, dateOfBirth, variant, remindsBirthday, remindsChristmas, remindsMothersDay }]`, no top-level occasion flags).
+- **send-birthday-events cron**: retire — replaced by yearly-reemit + Klaviyo flow delays.
+- **sync-klaviyo**: keep, updated to new profile shape.
+- **Dashboard**: update to show per-person occasion badges.
 
-1. `DROP TABLE public.reminders;`
-2. `DROP TYPE public.reminder_event_type;` (if it exists as an enum)
-3. `ALTER TABLE public.reminder_customers ADD COLUMN reminds_christmas boolean NOT NULL DEFAULT true, ADD COLUMN reminds_mothers_day boolean NOT NULL DEFAULT true;`
-4. `CREATE TABLE public.reminder_people (…)` + GRANTs to `authenticated` and `service_role` + RLS enabled + policy "Customers can manage own people" scoped through `reminder_customers.auth_user_id = auth.uid()` + `updated_at` trigger using existing `set_updated_at()`.
+## Issues worth flagging
 
-No `anon` grant on either table — reads always go through server functions.
+1. **Klaviyo flow delays run from event timestamp**, not from `next_occurrence`. Flows must use "Wait until date property = `next_occurrence` minus 14 days" — a standard Klaviyo action, but worth confirming your flows will be built that way. If flows use fixed "wait N days after event," `next_occurrence` is only useful for segmentation.
+2. **Cancelled reminders don't stop already-running Klaviyo flows.** Klaviyo flows are per-profile; a Reminder Cancelled event can be used as a *Trigger Filter / Skip step*, but existing flow recipients continue unless the flow explicitly checks for a matching cancel event. Your flow design needs a "skip if cancelled event received for same person+occasion since trigger" filter.
+3. **Verification-first means no events fire until they click.** Same as today — unverified customers generate no `Reminder Created` events. Confirmed by "keep verification."
+4. **DOB required** removes the DD/MM-only checkout ergonomics; the checkout extension currently accepts DD/MM. This will slightly increase checkout friction — acceptable per your answer.
+5. **`variant` becomes single-value**: existing data (multi-variant arrays) is dropped as part of the clean slate. Confirmed.
 
-## Out of scope
+## Technical notes
 
-- Visual redesign of the pages (same look & feel).
-- Renaming `mum_variants` → something more generic.
-- Multi-person checkout (checkout stays single-person for now; account page is where you add more).
-
-## Rollout order
-
-1. Migration (drop old, add new, alter customer).
-2. `reminders.server.ts` + `reminders.functions.ts` rewrite.
-3. `/reminders` + `/dashboard` UI rewrite.
-4. Headless `account-reminders` extension rewrite.
-5. `mum-reminders` checkout extension: add Name field, update submitted payload.
-6. `save-reminders` hook + `shopify/reminders` route: new payload shape.
-7. `send-birthday-events` cron: iterate people.
-8. `buildKlaviyoPayload` update + note in-Klaviyo template changes needed.
-
-I'll leave a short note at the end listing the Klaviyo template variables you'll need to swap (`event.mumVariant`, `event.personName`, `event.birthdayDate`) so you can update flows in the Klaviyo UI.
+- New DB migration drops `reminder_customers` and `reminder_people` and recreates them with the new shape (no data preserved, per "clean slate"). New `reminder_event_log` table for dedupe/cancel tracking.
+- Diffing on save: load existing `reminder_people` + latest per-(person,occasion) rows from `reminder_event_log`, compare against submitted payload, produce two lists (created, cancelled).
+- Yearly-reemit route reuses `nextBirthday` and `ukMothersDay` from `dates.server.ts`; adds a `nextChristmas(year)` helper.
+- pg_cron schedule set via `supabase--insert` after the route is live, calling the stable `project--<id>.lovable.app` URL with the anon `apikey` header.

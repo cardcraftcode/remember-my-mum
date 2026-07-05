@@ -1,22 +1,24 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
-import type { Database } from '@/integrations/supabase/types'
-import { upsertCustomerAndPeople } from '@/lib/reminders.server'
+import { upsertCustomerAndPeople, getSupabaseAdmin } from '@/lib/reminders.server'
 import { verifyShopifySessionToken } from '@/lib/shopify.server'
+import { MUM_VARIANTS } from '@/lib/mum-variants'
+
+const VariantSchema = z.enum([...MUM_VARIANTS] as [string, ...string[]])
 
 const PersonSchema = z.object({
   name: z.string().trim().min(1).max(120),
   dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  mumVariants: z.array(z.string()).default([]),
+  variant: VariantSchema,
+  remindsBirthday: z.boolean().default(true),
+  remindsChristmas: z.boolean().default(true),
+  remindsMothersDay: z.boolean().default(true),
 })
 
 const ReminderPayloadSchema = z.object({
   email: z.string().email(),
   shopDomain: z.string().min(1),
   people: z.array(PersonSchema).default([]),
-  remindsChristmas: z.boolean().optional(),
-  remindsMothersDay: z.boolean().optional(),
 })
 
 const CORS_HEADERS = {
@@ -44,8 +46,7 @@ function textResponse(body: string, status: number) {
 export const Route = createFileRoute('/api/public/shopify/reminders')({
   server: {
     handlers: {
-      OPTIONS: async () =>
-        new Response(null, { status: 204, headers: CORS_HEADERS }),
+      OPTIONS: async () => new Response(null, { status: 204, headers: CORS_HEADERS }),
 
       GET: async ({ request }) => {
         const authHeader = request.headers.get('authorization')
@@ -66,22 +67,11 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
           return textResponse('Session token missing customer identity', 401)
         }
 
-        const supabaseUrl = process.env.SUPABASE_URL
-        const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-        if (!supabaseUrl || !supabaseServiceRoleKey) {
-          return textResponse('Server misconfigured', 500)
-        }
-        const admin = createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
-          auth: {
-            storage: undefined,
-            persistSession: false,
-            autoRefreshToken: false,
-          },
-        })
+        const admin = getSupabaseAdmin()
 
         const { data: customer, error: customerError } = await admin
           .from('reminder_customers')
-          .select('id, reminds_christmas, reminds_mothers_day')
+          .select('id')
           .eq('shopify_customer_id', tokenCustomerId)
           .maybeSingle()
 
@@ -91,16 +81,14 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
         }
 
         if (!customer) {
-          return jsonResponse({
-            people: [],
-            remindsChristmas: true,
-            remindsMothersDay: true,
-          })
+          return jsonResponse({ people: [] })
         }
 
         const { data: people, error: peopleErr } = await admin
           .from('reminder_people')
-          .select('id, name, date_of_birth, mum_variants, reminds_birthday')
+          .select(
+            'id, name, date_of_birth, variant, reminds_birthday, reminds_christmas, reminds_mothers_day',
+          )
           .eq('customer_id', customer.id)
           .order('created_at', { ascending: true })
 
@@ -114,11 +102,11 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
             id: p.id,
             name: p.name,
             dateOfBirth: p.date_of_birth,
-            mumVariants: p.mum_variants ?? [],
+            variant: p.variant,
             remindsBirthday: p.reminds_birthday,
+            remindsChristmas: p.reminds_christmas,
+            remindsMothersDay: p.reminds_mothers_day,
           })),
-          remindsChristmas: customer.reminds_christmas,
-          remindsMothersDay: customer.reminds_mothers_day,
         })
       },
 
@@ -127,7 +115,6 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
           return textResponse('Missing session token', 401)
         }
-
         const token = authHeader.replace('Bearer ', '')
 
         let claims: { iss: string; sub?: string }
@@ -137,7 +124,6 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
           console.error('Shopify session token verification failed', error)
           return textResponse('Invalid session token', 401)
         }
-
         const tokenCustomerId = claims.sub
         if (!tokenCustomerId) {
           return textResponse('Session token missing customer identity', 401)
@@ -158,22 +144,7 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
         const payload = parsed.data
 
         try {
-          const supabaseUrl = process.env.SUPABASE_URL
-          const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-          if (!supabaseUrl || !supabaseServiceRoleKey) {
-            throw new Error('Missing Supabase server credentials')
-          }
-          const admin = createClient<Database>(
-            supabaseUrl,
-            supabaseServiceRoleKey,
-            {
-              auth: {
-                storage: undefined,
-                persistSession: false,
-                autoRefreshToken: false,
-              },
-            },
-          )
+          const admin = getSupabaseAdmin()
 
           const { data: existing, error: lookupError } = await admin
             .from('reminder_customers')
@@ -194,18 +165,14 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
             return textResponse('Forbidden', 403)
           }
 
-          // Replace the customer's people list with the submitted set.
-          // First upsert the customer + append any new people via the shared
-          // helper, then reconcile deletions/updates for this authenticated
-          // customer specifically.
           const result = await upsertCustomerAndPeople({
             email: payload.email,
             shopDomain: payload.shopDomain,
             shopifyCustomerId: tokenCustomerId,
             people: payload.people,
-            remindsChristmas: payload.remindsChristmas,
-            remindsMothersDay: payload.remindsMothersDay,
+            replaceAll: true,
             consentTimestamp: new Date(),
+            appBaseUrl: new URL(request.url).origin,
           })
 
           return jsonResponse({

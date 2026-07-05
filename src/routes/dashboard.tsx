@@ -6,7 +6,6 @@ import {
   createPerson,
   updatePerson,
   deletePerson,
-  updateAccountReminders,
 } from '@/lib/reminders.functions'
 import { getSession, logout, verifyGuestDashboardToken } from '@/lib/auth'
 import { MUM_VARIANTS } from '@/lib/mum-variants'
@@ -15,19 +14,30 @@ type PersonRow = {
   id: string
   name: string
   date_of_birth: string
-  mum_variants: string[] | null
+  variant: string
   reminds_birthday: boolean
+  reminds_christmas: boolean
+  reminds_mothers_day: boolean
 }
 
 type PersonDraft = {
   name: string
   dateOfBirth: string
-  mumVariants: string[]
+  variant: string
   remindsBirthday: boolean
+  remindsChristmas: boolean
+  remindsMothersDay: boolean
 }
 
 function emptyDraft(): PersonDraft {
-  return { name: '', dateOfBirth: '', mumVariants: [], remindsBirthday: true }
+  return {
+    name: '',
+    dateOfBirth: '',
+    variant: 'Mum',
+    remindsBirthday: true,
+    remindsChristmas: true,
+    remindsMothersDay: true,
+  }
 }
 
 export const Route = createFileRoute('/dashboard')({
@@ -73,11 +83,6 @@ function DashboardPage() {
   })
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deletePerson({ data: { id } }),
-    onSuccess: invalidate,
-  })
-  const accountMutation = useMutation({
-    mutationFn: (input: { remindsChristmas: boolean; remindsMothersDay: boolean }) =>
-      updateAccountReminders({ data: input }),
     onSuccess: invalidate,
   })
 
@@ -144,12 +149,8 @@ function DashboardPage() {
     )
   }
 
-  const { customer, people } = dashboardData as {
-    customer: {
-      email: string
-      reminds_christmas: boolean
-      reminds_mothers_day: boolean
-    }
+  const { customer, people } = dashboardData as unknown as {
+    customer: { email: string }
     people: PersonRow[]
   }
 
@@ -175,8 +176,7 @@ function DashboardPage() {
 
         {(createMutation.isError ||
           updateMutation.isError ||
-          deleteMutation.isError ||
-          accountMutation.isError) && (
+          deleteMutation.isError) && (
           <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
             Something went wrong. Please try again.
           </p>
@@ -185,62 +185,27 @@ function DashboardPage() {
         <div className="space-y-4">
           {people.length === 0 && (
             <p className="rounded-2xl bg-white p-6 text-gray-600 shadow-sm">
-              You haven't added anyone yet. Add someone below to start getting birthday
-              reminders.
+              You haven't added anyone yet. Add someone below to start getting reminders.
             </p>
           )}
 
           {people.map((person) => (
-            <PersonRow
+            <PersonRowCard
               key={person.id}
               person={person}
-              onSave={(draft) =>
-                updateMutation.mutateAsync({ id: person.id, ...draft })
-              }
+              onSave={(draft) => updateMutation.mutateAsync({ id: person.id, ...draft })}
               onDelete={() => deleteMutation.mutateAsync(person.id)}
             />
           ))}
 
           <AddPersonCard onCreate={(draft) => createMutation.mutateAsync(draft)} />
         </div>
-
-        <div className="mt-8 space-y-3 rounded-2xl bg-white p-6 shadow-sm">
-          <p className="text-sm font-medium text-gray-700">Account reminders</p>
-          <label className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={customer.reminds_mothers_day}
-              onChange={(e) =>
-                accountMutation.mutate({
-                  remindsChristmas: customer.reminds_christmas,
-                  remindsMothersDay: e.target.checked,
-                })
-              }
-              className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-            />
-            <span className="text-gray-900">Remind me about Mother's Day</span>
-          </label>
-          <label className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={customer.reminds_christmas}
-              onChange={(e) =>
-                accountMutation.mutate({
-                  remindsChristmas: e.target.checked,
-                  remindsMothersDay: customer.reminds_mothers_day,
-                })
-              }
-              className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-            />
-            <span className="text-gray-900">Remind me about Christmas cards</span>
-          </label>
-        </div>
       </div>
     </div>
   )
 }
 
-function PersonRow({
+function PersonRowCard({
   person,
   onSave,
   onDelete,
@@ -253,12 +218,19 @@ function PersonRow({
   const [draft, setDraft] = useState<PersonDraft>({
     name: person.name,
     dateOfBirth: person.date_of_birth,
-    mumVariants: person.mum_variants ?? [],
+    variant: person.variant,
     remindsBirthday: person.reminds_birthday,
+    remindsChristmas: person.reminds_christmas,
+    remindsMothersDay: person.reminds_mothers_day,
   })
   const [saving, setSaving] = useState(false)
 
   if (!editing) {
+    const occasions = [
+      person.reminds_birthday && 'Birthday',
+      person.reminds_christmas && 'Christmas',
+      person.reminds_mothers_day && "Mother's Day",
+    ].filter(Boolean)
     return (
       <div className="rounded-2xl bg-white p-6 shadow-sm">
         <div className="flex items-start justify-between gap-4">
@@ -271,13 +243,11 @@ function PersonRow({
                 year: 'numeric',
               })}
             </p>
-            {person.mum_variants && person.mum_variants.length > 0 && (
-              <p className="mt-1 text-xs text-gray-500">
-                {person.mum_variants.join(', ')}
-              </p>
-            )}
+            <p className="mt-1 text-xs text-gray-500">Known as: {person.variant}</p>
             <p className="mt-2 text-xs text-gray-500">
-              Birthday reminder {person.reminds_birthday ? 'on' : 'off'}
+              {occasions.length > 0
+                ? `Reminders: ${occasions.join(', ')}`
+                : 'No reminders enabled'}
             </p>
           </div>
           <div className="flex gap-2">
@@ -289,7 +259,7 @@ function PersonRow({
             </button>
             <button
               onClick={() => {
-                if (confirm(`Delete reminder for ${person.name}?`)) onDelete()
+                if (confirm(`Delete reminders for ${person.name}?`)) onDelete()
               }}
               className="text-sm text-gray-500 hover:text-red-600"
             >
@@ -310,8 +280,10 @@ function PersonRow({
         setDraft({
           name: person.name,
           dateOfBirth: person.date_of_birth,
-          mumVariants: person.mum_variants ?? [],
+          variant: person.variant,
           remindsBirthday: person.reminds_birthday,
+          remindsChristmas: person.reminds_christmas,
+          remindsMothersDay: person.reminds_mothers_day,
         })
         setEditing(false)
       }}
@@ -389,13 +361,6 @@ function PersonEditor({
   submitLabel: string
   disabled: boolean
 }) {
-  const toggleVariant = (variant: string, checked: boolean) => {
-    const set = new Set(draft.mumVariants)
-    if (checked) set.add(variant)
-    else set.delete(variant)
-    setDraft({ ...draft, mumVariants: Array.from(set) })
-  }
-
   return (
     <form
       onSubmit={(e) => {
@@ -405,7 +370,9 @@ function PersonEditor({
       className="space-y-4 rounded-2xl bg-white p-6 shadow-sm"
     >
       <div>
-        <label className="block text-sm font-medium text-gray-700">Name</label>
+        <label className="block text-sm font-medium text-gray-700">
+          Who is the reminder for?
+        </label>
         <input
           type="text"
           required
@@ -417,7 +384,59 @@ function PersonEditor({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">Date of birth</label>
+        <label className="block text-sm font-medium text-gray-700">
+          What is she known as?
+        </label>
+        <select
+          value={draft.variant}
+          onChange={(e) => setDraft({ ...draft, variant: e.target.value })}
+          className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 shadow-sm focus:border-pink-500 focus:outline-none focus:ring-pink-500"
+        >
+          {MUM_VARIANTS.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <p className="mb-2 text-sm font-medium text-gray-700">Reminder about</p>
+        <div className="space-y-2">
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={draft.remindsBirthday}
+              onChange={(e) => setDraft({ ...draft, remindsBirthday: e.target.checked })}
+              className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+            />
+            <span className="text-gray-900">Birthday</span>
+          </label>
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={draft.remindsChristmas}
+              onChange={(e) => setDraft({ ...draft, remindsChristmas: e.target.checked })}
+              className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+            />
+            <span className="text-gray-900">Christmas</span>
+          </label>
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={draft.remindsMothersDay}
+              onChange={(e) => setDraft({ ...draft, remindsMothersDay: e.target.checked })}
+              className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+            />
+            <span className="text-gray-900">Mother's Day</span>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700">
+          When was she born?
+        </label>
         <input
           type="date"
           required
@@ -426,35 +445,6 @@ function PersonEditor({
           className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-pink-500 focus:outline-none focus:ring-pink-500"
         />
       </div>
-
-      <div>
-        <p className="mb-2 text-sm font-medium text-gray-700">
-          Known as (select all that apply)
-        </p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {MUM_VARIANTS.map((variant) => (
-            <label key={variant} className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={draft.mumVariants.includes(variant)}
-                onChange={(e) => toggleVariant(variant, e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-              />
-              <span className="text-sm text-gray-900">{variant}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <label className="flex items-center gap-3">
-        <input
-          type="checkbox"
-          checked={draft.remindsBirthday}
-          onChange={(e) => setDraft({ ...draft, remindsBirthday: e.target.checked })}
-          className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-        />
-        <span className="text-gray-900">Birthday reminder</span>
-      </label>
 
       <div className="flex gap-2">
         <button

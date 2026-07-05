@@ -6,6 +6,7 @@ import {
   Card,
   Text,
   TextField,
+  Select,
   Checkbox,
   Button,
   Banner,
@@ -17,6 +18,24 @@ import {
 } from "@shopify/ui-extensions-react/customer-account";
 import { useEffect, useState } from "react";
 
+const MUM_VARIANTS = [
+  "Mom",
+  "Mommy",
+  "Stepmom",
+  "Mam",
+  "Mammy",
+  "Stepmam",
+  "Mum",
+  "Mummy",
+  "Stepmum",
+  "Ma",
+  "Mama",
+  "Amma",
+  "Ammi",
+  "Maw",
+  "Mother",
+];
+
 export default reactExtension("customer-account.page.render", () => (
   <ReminderPage />
 ));
@@ -25,15 +44,24 @@ type Person = {
   id?: string;
   name: string;
   dateOfBirth: string; // YYYY-MM-DD
-  mumVariants: string[];
+  variant: string;
   remindsBirthday: boolean;
+  remindsChristmas: boolean;
+  remindsMothersDay: boolean;
 };
 
 type LoadState = "loading" | "ready" | "error";
 type SaveState = "idle" | "saving" | "ok" | "error";
 
 function emptyPerson(): Person {
-  return { name: "", dateOfBirth: "", mumVariants: [], remindsBirthday: true };
+  return {
+    name: "",
+    dateOfBirth: "",
+    variant: "Mum",
+    remindsBirthday: true,
+    remindsChristmas: true,
+    remindsMothersDay: true,
+  };
 }
 
 function ReminderPage() {
@@ -49,11 +77,7 @@ function ReminderPage() {
 
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
-
   const [people, setPeople] = useState<Person[]>([]);
-  const [christmasOn, setChristmasOn] = useState(true);
-  const [mothersDayOn, setMothersDayOn] = useState(true);
-
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -72,15 +96,9 @@ function ReminderPage() {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as {
-          people?: Person[];
-          remindsChristmas?: boolean;
-          remindsMothersDay?: boolean;
-        };
+        const data = (await res.json()) as { people?: Person[] };
         if (cancelled) return;
         setPeople(data.people ?? []);
-        setChristmasOn(data.remindsChristmas ?? true);
-        setMothersDayOn(data.remindsMothersDay ?? true);
         setLoadState("ready");
       } catch (e) {
         if (cancelled) return;
@@ -120,7 +138,10 @@ function ReminderPage() {
       .map((p) => ({
         name: p.name.trim(),
         dateOfBirth: p.dateOfBirth,
-        mumVariants: p.mumVariants,
+        variant: p.variant,
+        remindsBirthday: p.remindsBirthday,
+        remindsChristmas: p.remindsChristmas,
+        remindsMothersDay: p.remindsMothersDay,
       }));
 
     setSaveState("saving");
@@ -137,8 +158,6 @@ function ReminderPage() {
           email,
           shopDomain: (settings.shop_domain as string) ?? "",
           people: cleaned,
-          remindsChristmas: christmasOn,
-          remindsMothersDay: mothersDayOn,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -168,8 +187,8 @@ function ReminderPage() {
         {loadState === "ready" && (
           <BlockStack spacing="base">
             <Text>
-              Add each person you'd like a birthday reminder for. Then choose
-              whether you want Mother's Day and Christmas reminders too.
+              Add each person you'd like reminders for. Choose which occasions
+              (birthday, Christmas, Mother's Day) to be reminded about.
             </Text>
 
             {people.length === 0 && (
@@ -179,22 +198,40 @@ function ReminderPage() {
             {people.map((person, i) => (
               <BlockStack key={person.id ?? i} spacing="tight">
                 <TextField
-                  label="Name"
+                  label="Who is the reminder for?"
                   value={person.name}
                   onChange={(v) => updatePerson(i, { name: v })}
                 />
+                <Select
+                  label="What is she known as?"
+                  value={person.variant}
+                  onChange={(v) => updatePerson(i, { variant: v })}
+                  options={MUM_VARIANTS.map((mv) => ({ label: mv, value: mv }))}
+                />
+                <Checkbox
+                  checked={person.remindsBirthday}
+                  onChange={(v) => updatePerson(i, { remindsBirthday: v })}
+                >
+                  Birthday
+                </Checkbox>
+                <Checkbox
+                  checked={person.remindsChristmas}
+                  onChange={(v) => updatePerson(i, { remindsChristmas: v })}
+                >
+                  Christmas
+                </Checkbox>
+                <Checkbox
+                  checked={person.remindsMothersDay}
+                  onChange={(v) => updatePerson(i, { remindsMothersDay: v })}
+                >
+                  Mother's Day
+                </Checkbox>
                 <TextField
                   label="Date of birth (YYYY-MM-DD)"
                   value={person.dateOfBirth}
                   onChange={(v) => updatePerson(i, { dateOfBirth: v })}
                   placeholder="1955-03-15"
                 />
-                <Checkbox
-                  checked={person.remindsBirthday}
-                  onChange={(v) => updatePerson(i, { remindsBirthday: v })}
-                >
-                  Birthday reminder
-                </Checkbox>
                 <InlineStack>
                   <Button kind="plain" onPress={() => removePerson(i)}>
                     Remove
@@ -208,16 +245,6 @@ function ReminderPage() {
                 + Add person
               </Button>
             </InlineStack>
-
-            <BlockStack spacing="tight">
-              <Text emphasis="bold">Account reminders</Text>
-              <Checkbox checked={mothersDayOn} onChange={setMothersDayOn}>
-                Mother's Day reminder
-              </Checkbox>
-              <Checkbox checked={christmasOn} onChange={setChristmasOn}>
-                Christmas reminder
-              </Checkbox>
-            </BlockStack>
 
             {saveState === "ok" && (
               <Banner status="success" title="Reminders saved">
