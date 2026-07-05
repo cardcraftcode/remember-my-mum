@@ -35,12 +35,12 @@ Profile is `email`; `unique_id` guarantees Klaviyo-side dedupe too.
 ### DB
 No schema change. `reminder_event_log.event_type` has no CHECK constraint, so `'due_14'` / `'due_7'` slot in.
 
-## pg_cron — every 2 minutes (testing)
+## pg_cron — daily at 02:00 UTC
 Scheduled via `supabase--insert` (not migration), body `{}`, POSTing to the stable prod URL:
 ```sql
 select cron.schedule(
-  'due-reminders-test',
-  '*/2 * * * *',
+  'due-reminders',
+  '0 2 * * *',
   $$ select net.http_post(
        url:='https://project--650a08ee-6644-4279-8bb5-d8d767d35ea1.lovable.app/api/public/hooks/due-reminders',
        headers:='{"Content-Type":"application/json","apikey":"<SUPABASE_PUBLISHABLE_KEY>"}'::jsonb,
@@ -48,7 +48,6 @@ select cron.schedule(
      ); $$
 );
 ```
-Switch to `'0 2 * * *'` and rename the job (`due-reminders`) once testing is done — I'll drop a one-liner in the plan follow-up.
 
 ## Testing question — please confirm one
 Because the emit condition is a **strict day-window match** (exactly 14 or 7 days out), running every 2 minutes won't actually fire events unless you seed a person whose `next_occurrence` happens to land on today+14 or today+7. Two ways to make testing tractable:
