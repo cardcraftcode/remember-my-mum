@@ -162,6 +162,8 @@ function RemindersPage() {
                 key={index}
                 person={person}
                 index={index}
+                expanded={expanded[index]}
+                onExpand={() => expandPerson(index)}
                 onChange={(patch) => updatePerson(index, patch)}
                 onToggleVariant={(variant, checked) =>
                   toggleVariant(index, variant, checked)
