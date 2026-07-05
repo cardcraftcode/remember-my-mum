@@ -61,6 +61,8 @@ export type Database = {
           guest_token_version: number
           id: string
           klaviyo_profile_id: string | null
+          reminds_christmas: boolean
+          reminds_mothers_day: boolean
           shop_domain: string | null
           shopify_customer_id: string | null
           updated_at: string
@@ -76,6 +78,8 @@ export type Database = {
           guest_token_version?: number
           id?: string
           klaviyo_profile_id?: string | null
+          reminds_christmas?: boolean
+          reminds_mothers_day?: boolean
           shop_domain?: string | null
           shopify_customer_id?: string | null
           updated_at?: string
@@ -91,6 +95,8 @@ export type Database = {
           guest_token_version?: number
           id?: string
           klaviyo_profile_id?: string | null
+          reminds_christmas?: boolean
+          reminds_mothers_day?: boolean
           shop_domain?: string | null
           shopify_customer_id?: string | null
           updated_at?: string
@@ -100,40 +106,40 @@ export type Database = {
         }
         Relationships: []
       }
-      reminders: {
+      reminder_people: {
         Row: {
           created_at: string
           customer_id: string
-          enabled: boolean
-          event_date: string | null
-          event_type: Database["public"]["Enums"]["reminder_event_type"]
+          date_of_birth: string
           id: string
           mum_variants: string[]
+          name: string
+          reminds_birthday: boolean
           updated_at: string
         }
         Insert: {
           created_at?: string
           customer_id: string
-          enabled?: boolean
-          event_date?: string | null
-          event_type: Database["public"]["Enums"]["reminder_event_type"]
+          date_of_birth: string
           id?: string
           mum_variants?: string[]
+          name: string
+          reminds_birthday?: boolean
           updated_at?: string
         }
         Update: {
           created_at?: string
           customer_id?: string
-          enabled?: boolean
-          event_date?: string | null
-          event_type?: Database["public"]["Enums"]["reminder_event_type"]
+          date_of_birth?: string
           id?: string
           mum_variants?: string[]
+          name?: string
+          reminds_birthday?: boolean
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "reminders_customer_id_fkey"
+            foreignKeyName: "reminder_people_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "reminder_customers"
@@ -149,7 +155,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      reminder_event_type: "birthday" | "christmas" | "mothers_day"
+      [_ in never]: never
     }
     CompositeTypes: {
       [_ in never]: never
@@ -276,8 +282,6 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {
-      reminder_event_type: ["birthday", "christmas", "mothers_day"],
-    },
+    Enums: {},
   },
 } as const
