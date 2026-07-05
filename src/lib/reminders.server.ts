@@ -4,10 +4,11 @@ import type { Database } from '@/integrations/supabase/types'
 import { createKlaviyoClient, type KlaviyoProfilePayload, KlaviyoClient } from './klaviyo.server'
 import { nextBirthday } from './dates.server'
 
-
-export type BirthdayEntry = {
-  date: string // ISO YYYY-MM-DD
+export type PersonInput = {
+  name: string
+  dateOfBirth: string // YYYY-MM-DD
   mumVariants: string[]
+  remindsBirthday?: boolean
 }
 
 type UpsertReminderInput = {
@@ -15,36 +16,29 @@ type UpsertReminderInput = {
   shopDomain: string
   shopifyCustomerId?: string | null
   authUserId?: string | null
-  // Canonical multi-birthday input. When provided (even if empty array), the
-  // customer's birthday reminders are replaced with the given entries.
-  birthdays?: BirthdayEntry[]
+  people?: PersonInput[]
   remindsChristmas?: boolean
   remindsMothersDay?: boolean
   consentTimestamp?: Date
-  // Base URL (e.g. "https://remember-my-mum.lovable.app") used to build the
-  // email verification link for unverified customers.
   appBaseUrl?: string
 }
 
-export type CustomerWithReminders = {
-  customer: Database['public']['Tables']['reminder_customers']['Row']
-  reminders: Database['public']['Tables']['reminders']['Row'][]
+export type CustomerRow = Database['public']['Tables']['reminder_customers']['Row']
+export type PersonRow = Database['public']['Tables']['reminder_people']['Row']
+
+export type CustomerWithPeople = {
+  customer: CustomerRow
+  people: PersonRow[]
 }
 
 function getSupabaseAdmin(): SupabaseClient<Database> {
   const supabaseUrl = process.env.SUPABASE_URL
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
   if (!supabaseUrl || !supabaseServiceRoleKey) {
     throw new Error('Missing Supabase server credentials')
   }
-
   return createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
-    auth: {
-      storage: undefined,
-      persistSession: false,
-      autoRefreshToken: false,
-    },
+    auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
   })
 }
 
@@ -52,10 +46,18 @@ function generateVerificationToken(): string {
   return randomBytes(32).toString('hex')
 }
 
-
-export async function upsertCustomerAndReminders(
+/**
+ * Creates or updates a customer and (additively) appends any people
+ * supplied in the payload. Existing people with the same (name, date_of_birth)
+ * are merged (mum_variants unioned, reminds_birthday preserved as OR).
+ *
+ * `remindsChristmas` / `remindsMothersDay` are additive too: only ever turned
+ * on by a submission, never off — so a checkout form with unchecked boxes
+ * won't silently disable an existing preference.
+ */
+export async function upsertCustomerAndPeople(
   input: UpsertReminderInput,
-): Promise<CustomerWithReminders> {
+): Promise<CustomerWithPeople> {
   const supabaseAdmin = getSupabaseAdmin()
   const klaviyo = createKlaviyoClient(supabaseAdmin)
 
@@ -70,8 +72,7 @@ export async function upsertCustomerAndReminders(
   const now = new Date()
   const consentTimestamp = input.consentTimestamp ?? now
 
-
-  let customer: Database['public']['Tables']['reminder_customers']['Row']
+  let customer: CustomerRow
 
   if (existing) {
     const update: Database['public']['Tables']['reminder_customers']['Update'] = {
@@ -82,8 +83,10 @@ export async function upsertCustomerAndReminders(
     if (input.shopifyCustomerId) update.shopify_customer_id = input.shopifyCustomerId
     if (input.authUserId) update.auth_user_id = input.authUserId
 
-    // If the customer has never verified their email, mint (or refresh) a
-    // verification token so we can send them a fresh confirmation link.
+    // Additive: only turn account toggles ON, never OFF.
+    if (input.remindsChristmas === true) update.reminds_christmas = true
+    if (input.remindsMothersDay === true) update.reminds_mothers_day = true
+
     if (!existing.verified_at) {
       update.verification_token = generateVerificationToken()
       update.verification_sent_at = now.toISOString()
@@ -105,8 +108,8 @@ export async function upsertCustomerAndReminders(
       shopify_customer_id: input.shopifyCustomerId ?? null,
       auth_user_id: input.authUserId ?? null,
       consent_timestamp: consentTimestamp.toISOString(),
-      // New customers always start unverified — they must click the email link
-      // before we send any reminders.
+      reminds_christmas: input.remindsChristmas ?? true,
+      reminds_mothers_day: input.remindsMothersDay ?? true,
       verified_at: null,
       verification_token: generateVerificationToken(),
       verification_sent_at: now.toISOString(),
@@ -122,118 +125,74 @@ export async function upsertCustomerAndReminders(
     customer = inserted
   }
 
-  // Append birthday rows when a birthdays array was supplied. Each form
-  // submission adds new birthday reminders rather than replacing existing
-  // ones, so a shopper who buys a second gift for a different Mum keeps
-  // their earlier reminders. If a birthday for the same date already exists
-  // we merge in any new mum_variants instead of inserting a duplicate.
-  if (input.birthdays !== undefined && input.birthdays.length > 0) {
-    const { data: existingBirthdays, error: existingBirthdayErr } = await supabaseAdmin
-      .from('reminders')
-      .select('id, event_date, mum_variants')
+  if (input.people !== undefined && input.people.length > 0) {
+    const { data: existingPeople, error: existingErr } = await supabaseAdmin
+      .from('reminder_people')
+      .select('id, name, date_of_birth, mum_variants, reminds_birthday')
       .eq('customer_id', customer.id)
-      .eq('event_type', 'birthday')
 
-    if (existingBirthdayErr) throw existingBirthdayErr
+    if (existingErr) throw existingErr
 
-    const existingByDate = new Map(
-      (existingBirthdays ?? []).map((r) => [r.event_date, r]),
+    const key = (name: string, dob: string) =>
+      `${name.trim().toLowerCase()}|${dob}`
+
+    const existingByKey = new Map(
+      (existingPeople ?? []).map((p) => [key(p.name, p.date_of_birth), p]),
     )
 
-    const toInsert: Database['public']['Tables']['reminders']['Insert'][] = []
+    const toInsert: Database['public']['Tables']['reminder_people']['Insert'][] = []
 
-    for (const b of input.birthdays) {
-      const existing = existingByDate.get(b.date)
-      if (existing) {
+    for (const p of input.people) {
+      const found = existingByKey.get(key(p.name, p.dateOfBirth))
+      if (found) {
         const merged = Array.from(
-          new Set([...(existing.mum_variants ?? []), ...b.mumVariants]),
+          new Set([...(found.mum_variants ?? []), ...p.mumVariants]),
         )
         const { error: mergeErr } = await supabaseAdmin
-          .from('reminders')
-          .update({ mum_variants: merged, enabled: true })
-          .eq('id', existing.id)
+          .from('reminder_people')
+          .update({
+            mum_variants: merged,
+            reminds_birthday:
+              found.reminds_birthday || (p.remindsBirthday ?? true),
+          })
+          .eq('id', found.id)
         if (mergeErr) throw mergeErr
       } else {
         toInsert.push({
           customer_id: customer.id,
-          event_type: 'birthday',
-          event_date: b.date,
-          enabled: true,
-          mum_variants: b.mumVariants,
+          name: p.name,
+          date_of_birth: p.dateOfBirth,
+          mum_variants: p.mumVariants,
+          reminds_birthday: p.remindsBirthday ?? true,
         })
       }
     }
 
     if (toInsert.length > 0) {
-      const { error: birthdayInsertError } = await supabaseAdmin
-        .from('reminders')
-        .insert(toInsert)
-
-      if (birthdayInsertError) throw birthdayInsertError
-    }
-  }
-
-  // Christmas / Mother's Day: single row per customer, keep upsert.
-  const singletonEntries: Array<{
-    eventType: 'christmas' | 'mothers_day'
-    enabled: boolean | undefined
-  }> = [
-    { eventType: 'christmas', enabled: input.remindsChristmas },
-    { eventType: 'mothers_day', enabled: input.remindsMothersDay },
-  ]
-
-  for (const entry of singletonEntries) {
-    if (entry.enabled === undefined) continue
-
-    const { data: existingReminder, error: existingErr } = await supabaseAdmin
-      .from('reminders')
-      .select('id, enabled')
-      .eq('customer_id', customer.id)
-      .eq('event_type', entry.eventType)
-      .maybeSingle()
-
-    if (existingErr) throw existingErr
-
-    if (existingReminder) {
-      // Additive: only ever turn a singleton ON from a checkout submission,
-      // never off. A shopper who previously opted in should keep that
-      // preference even if a later form ships with the box unchecked.
-      if (entry.enabled && !existingReminder.enabled) {
-        const { error: updateErr } = await supabaseAdmin
-          .from('reminders')
-          .update({ enabled: true })
-          .eq('id', existingReminder.id)
-        if (updateErr) throw updateErr
-      }
-    } else if (entry.enabled) {
       const { error: insertErr } = await supabaseAdmin
-        .from('reminders')
-        .insert({
-          customer_id: customer.id,
-          event_type: entry.eventType,
-          event_date: null,
-          enabled: true,
-        })
+        .from('reminder_people')
+        .insert(toInsert)
       if (insertErr) throw insertErr
     }
   }
 
-  const { data: reminders, error: fetchError } = await supabaseAdmin
-    .from('reminders')
+  const { data: people, error: peopleErr } = await supabaseAdmin
+    .from('reminder_people')
     .select('*')
     .eq('customer_id', customer.id)
+    .order('created_at', { ascending: true })
 
-  if (fetchError) throw fetchError
+  if (peopleErr) throw peopleErr
 
   await syncCustomerToKlaviyo({
     supabaseAdmin,
     klaviyo,
     customer,
-    reminders: reminders ?? [],
+    people: people ?? [],
     appBaseUrl: input.appBaseUrl,
   })
 
-  return { customer, reminders: reminders ?? [] }
+  return { customer, people: people ?? [] }
 }
 
 /**
@@ -244,7 +203,7 @@ export async function upsertCustomerAndReminders(
 export async function verifyCustomerByToken(
   token: string,
   appBaseUrl?: string,
-): Promise<CustomerWithReminders | null> {
+): Promise<CustomerWithPeople | null> {
   if (!token || token.length < 16) return null
 
   const supabaseAdmin = getSupabaseAdmin()
@@ -260,10 +219,6 @@ export async function verifyCustomerByToken(
 
   const now = new Date().toISOString()
 
-  // Idempotent verification: keep the token so repeat clicks on the same
-  // link (e.g. Klaviyo test sends, users re-opening the email) continue to
-  // resolve successfully instead of showing "Link expired". A fresh token is
-  // minted on the next unverified upsert if we ever need to invalidate.
   const { data: updated, error: updateError } = await supabaseAdmin
     .from('reminder_customers')
     .update({
@@ -276,33 +231,34 @@ export async function verifyCustomerByToken(
 
   if (updateError || !updated) throw updateError ?? new Error('Verification update failed')
 
-  const { data: reminders } = await supabaseAdmin
-    .from('reminders')
+  const { data: people } = await supabaseAdmin
+    .from('reminder_people')
     .select('*')
     .eq('customer_id', updated.id)
+    .order('created_at', { ascending: true })
 
   const klaviyo = createKlaviyoClient(supabaseAdmin)
   await syncCustomerToKlaviyo({
     supabaseAdmin,
     klaviyo,
     customer: updated,
-    reminders: reminders ?? [],
+    people: people ?? [],
     appBaseUrl,
   })
 
-  return { customer: updated, reminders: reminders ?? [] }
+  return { customer: updated, people: people ?? [] }
 }
 
 export async function syncCustomerToKlaviyo(args: {
   supabaseAdmin: SupabaseClient<Database>
   klaviyo: KlaviyoClient
-  customer: Database['public']['Tables']['reminder_customers']['Row']
-  reminders: Database['public']['Tables']['reminders']['Row'][]
+  customer: CustomerRow
+  people: PersonRow[]
   appBaseUrl?: string
 }) {
-  const { supabaseAdmin, klaviyo, customer, reminders, appBaseUrl } = args
+  const { supabaseAdmin, klaviyo, customer, people, appBaseUrl } = args
 
-  const klaviyoPayload = buildKlaviyoPayload(customer, reminders, appBaseUrl)
+  const klaviyoPayload = buildKlaviyoPayload(customer, people, appBaseUrl)
 
   try {
     let profile: { id: string; email: string }
@@ -323,11 +279,6 @@ export async function syncCustomerToKlaviyo(args: {
       { profileId: profile.id, verified: !!customer.verified_at },
     )
 
-    // Fire a dedicated event for unverified customers so Klaviyo flows can
-    // trigger a confirmation email off the event rather than the (less
-    // reliable) profile-property-change trigger. `unique_id` includes the
-    // verification token so a fresh token = a fresh event, while double
-    // submits with the same token stay idempotent.
     if (!customer.verified_at && klaviyoPayload.verificationUrl) {
       try {
         await klaviyo.trackEvent({
@@ -360,35 +311,28 @@ export async function syncCustomerToKlaviyo(args: {
       klaviyoPayload as unknown as Record<string, unknown>,
       error instanceof Error ? error.message : String(error),
     )
-    // Do not throw — DB write succeeded; Klaviyo failure is logged for retry.
   }
 }
 
 export function buildKlaviyoPayload(
-  customer: Database['public']['Tables']['reminder_customers']['Row'],
-  reminders: Database['public']['Tables']['reminders']['Row'][],
+  customer: CustomerRow,
+  people: PersonRow[],
   appBaseUrl?: string,
 ): KlaviyoProfilePayload {
-  const birthdayReminders = reminders
-    .filter((r) => r.event_type === 'birthday' && r.enabled && r.event_date)
-    .sort((a, b) => (a.event_date ?? '').localeCompare(b.event_date ?? ''))
+  const enabledBirthdayPeople = people
+    .filter((p) => p.reminds_birthday)
+    .sort((a, b) => a.date_of_birth.localeCompare(b.date_of_birth))
 
-  const christmasReminder = reminders.find((r) => r.event_type === 'christmas')
-  const mothersDayReminder = reminders.find((r) => r.event_type === 'mothers_day')
-
-  const birthdays = birthdayReminders.map((r) => ({
-    date: r.event_date!,
-    next: nextBirthday(r.event_date!),
-    mumVariants: (r.mum_variants ?? []) as string[],
+  const peoplePayload = enabledBirthdayPeople.map((p) => ({
+    name: p.name,
+    dateOfBirth: p.date_of_birth,
+    next: nextBirthday(p.date_of_birth),
+    mumVariants: (p.mum_variants ?? []) as string[],
+    remindsBirthday: p.reminds_birthday,
   }))
 
-  const first = birthdays[0]
   const isVerified = !!customer.verified_at
 
-  // Until the customer clicks the verification link, we still write the
-  // profile to Klaviyo so a "Verify your email" flow can send the confirmation
-  // email — but we force every reminds_* flag to false so no reminder flows
-  // can fire for an unverified address.
   const verificationUrl =
     !isVerified && customer.verification_token && appBaseUrl
       ? `${appBaseUrl.replace(/\/$/, '')}/verify-reminders?token=${customer.verification_token}`
@@ -398,12 +342,10 @@ export function buildKlaviyoPayload(
     email: customer.email,
     shopDomain: customer.shop_domain ?? undefined,
     shopifyCustomerId: customer.shopify_customer_id,
-    mumBirthday: first?.date ?? null,
-    mumBirthdayNext: first?.next ?? null,
-    birthdays,
-    remindsBirthday: isVerified && birthdays.length > 0,
-    remindsChristmas: isVerified && (christmasReminder?.enabled ?? false),
-    remindsMothersDay: isVerified && (mothersDayReminder?.enabled ?? false),
+    people: peoplePayload,
+    peopleCount: people.length,
+    remindsChristmas: isVerified && customer.reminds_christmas,
+    remindsMothersDay: isVerified && customer.reminds_mothers_day,
     consentTimestamp: customer.consent_timestamp,
     remindersVerified: isVerified,
     verificationUrl,

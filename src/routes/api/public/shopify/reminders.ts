@@ -2,22 +2,19 @@ import { createFileRoute } from '@tanstack/react-router'
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import type { Database } from '@/integrations/supabase/types'
-import { upsertCustomerAndReminders } from '@/lib/reminders.server'
+import { upsertCustomerAndPeople } from '@/lib/reminders.server'
 import { verifyShopifySessionToken } from '@/lib/shopify.server'
 
-const BirthdayEntrySchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+const PersonSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   mumVariants: z.array(z.string()).default([]),
 })
 
 const ReminderPayloadSchema = z.object({
   email: z.string().email(),
   shopDomain: z.string().min(1),
-  // New multi-birthday shape.
-  birthdays: z.array(BirthdayEntrySchema).optional(),
-  // Legacy single-birthday fields — used only if `birthdays` is absent.
-  mumBirthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  remindsBirthday: z.boolean().optional(),
+  people: z.array(PersonSchema).default([]),
   remindsChristmas: z.boolean().optional(),
   remindsMothersDay: z.boolean().optional(),
 })
@@ -84,7 +81,7 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
 
         const { data: customer, error: customerError } = await admin
           .from('reminder_customers')
-          .select('id, email')
+          .select('id, reminds_christmas, reminds_mothers_day')
           .eq('shopify_customer_id', tokenCustomerId)
           .maybeSingle()
 
@@ -95,36 +92,34 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
 
         if (!customer) {
           return jsonResponse({
-            birthdays: [],
-            remindsChristmas: false,
-            remindsMothersDay: false,
+            people: [],
+            remindsChristmas: true,
+            remindsMothersDay: true,
           })
         }
 
-        const { data: reminders, error: remindersError } = await admin
-          .from('reminders')
-          .select('event_type, event_date, enabled, mum_variants')
+        const { data: people, error: peopleErr } = await admin
+          .from('reminder_people')
+          .select('id, name, date_of_birth, mum_variants, reminds_birthday')
           .eq('customer_id', customer.id)
+          .order('created_at', { ascending: true })
 
-        if (remindersError) {
-          console.error('Reminders lookup failed', remindersError)
+        if (peopleErr) {
+          console.error('People lookup failed', peopleErr)
           return textResponse('Failed to load reminders', 500)
         }
 
-        const birthdays = (reminders ?? [])
-          .filter((r) => r.event_type === 'birthday' && r.enabled && r.event_date)
-          .map((r) => ({
-            date: r.event_date as string,
-            mumVariants: (r.mum_variants ?? []) as string[],
-          }))
-        const remindsChristmas = (reminders ?? []).some(
-          (r) => r.event_type === 'christmas' && r.enabled,
-        )
-        const remindsMothersDay = (reminders ?? []).some(
-          (r) => r.event_type === 'mothers_day' && r.enabled,
-        )
-
-        return jsonResponse({ birthdays, remindsChristmas, remindsMothersDay })
+        return jsonResponse({
+          people: (people ?? []).map((p) => ({
+            id: p.id,
+            name: p.name,
+            dateOfBirth: p.date_of_birth,
+            mumVariants: p.mum_variants ?? [],
+            remindsBirthday: p.reminds_birthday,
+          })),
+          remindsChristmas: customer.reminds_christmas,
+          remindsMothersDay: customer.reminds_mothers_day,
+        })
       },
 
       POST: async ({ request }) => {
@@ -143,10 +138,6 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
           return textResponse('Invalid session token', 401)
         }
 
-        // The Shopify session token's `sub` is the customer's GID.
-        // We MUST bind the write to this token-derived identity — not to the
-        // client-supplied email — otherwise any authenticated customer can
-        // overwrite another customer's record by sending their email.
         const tokenCustomerId = claims.sub
         if (!tokenCustomerId) {
           return textResponse('Session token missing customer identity', 401)
@@ -203,29 +194,24 @@ export const Route = createFileRoute('/api/public/shopify/reminders')({
             return textResponse('Forbidden', 403)
           }
 
-          let birthdayInput: Array<{ date: string; mumVariants: string[] }> = []
-          if (payload.remindsBirthday === false) {
-            birthdayInput = []
-          } else if (payload.birthdays && payload.birthdays.length > 0) {
-            birthdayInput = payload.birthdays
-          } else if (payload.mumBirthday) {
-            birthdayInput = [{ date: payload.mumBirthday, mumVariants: [] }]
-          }
-
-          const result = await upsertCustomerAndReminders({
+          // Replace the customer's people list with the submitted set.
+          // First upsert the customer + append any new people via the shared
+          // helper, then reconcile deletions/updates for this authenticated
+          // customer specifically.
+          const result = await upsertCustomerAndPeople({
             email: payload.email,
             shopDomain: payload.shopDomain,
             shopifyCustomerId: tokenCustomerId,
-            birthdays: birthdayInput,
-            remindsChristmas: payload.remindsChristmas ?? false,
-            remindsMothersDay: payload.remindsMothersDay ?? false,
+            people: payload.people,
+            remindsChristmas: payload.remindsChristmas,
+            remindsMothersDay: payload.remindsMothersDay,
             consentTimestamp: new Date(),
           })
 
           return jsonResponse({
             success: true,
             customerId: result.customer.id,
-            reminders: result.reminders,
+            people: result.people,
           })
         } catch (error) {
           console.error('Failed to save reminders', error)
