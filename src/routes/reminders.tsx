@@ -199,7 +199,7 @@ function RemindersPage() {
                 onChange={(e) => setRemindsChristmas(e.target.checked)}
                 className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
               />
-              <span className="text-gray-900">Remind me about Christmas cards</span>
+              <span className="text-gray-900">Remind me about Christmas</span>
             </label>
           </div>
 
