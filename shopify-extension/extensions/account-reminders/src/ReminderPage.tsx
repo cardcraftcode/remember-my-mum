@@ -21,8 +21,20 @@ export default reactExtension("customer-account.page.render", () => (
   <ReminderPage />
 ));
 
+type Person = {
+  id?: string;
+  name: string;
+  dateOfBirth: string; // YYYY-MM-DD
+  mumVariants: string[];
+  remindsBirthday: boolean;
+};
+
 type LoadState = "loading" | "ready" | "error";
 type SaveState = "idle" | "saving" | "ok" | "error";
+
+function emptyPerson(): Person {
+  return { name: "", dateOfBirth: "", mumVariants: [], remindsBirthday: true };
+}
 
 function ReminderPage() {
   const { i18n } = useApi();
@@ -38,16 +50,13 @@ function ReminderPage() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Single-birthday shape for v1; the backend accepts multi-birthday too.
-  const [birthday, setBirthday] = useState("");
-  const [birthdayOn, setBirthdayOn] = useState(true);
+  const [people, setPeople] = useState<Person[]>([]);
   const [christmasOn, setChristmasOn] = useState(true);
   const [mothersDayOn, setMothersDayOn] = useState(true);
 
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Load existing reminders on mount.
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -58,24 +67,20 @@ function ReminderPage() {
       }
       try {
         const token = await sessionToken.get();
-        const res = await fetch(
-          `${backendUrl}/api/public/shopify/reminders`,
-          {
-            method: "GET",
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
+        const res = await fetch(`${backendUrl}/api/public/shopify/reminders`, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as {
-          birthdays?: Array<{ date: string }>;
+          people?: Person[];
           remindsChristmas?: boolean;
           remindsMothersDay?: boolean;
         };
         if (cancelled) return;
-        setBirthday(data.birthdays?.[0]?.date ?? "");
-        setBirthdayOn((data.birthdays?.length ?? 0) > 0);
-        setChristmasOn(data.remindsChristmas ?? false);
-        setMothersDayOn(data.remindsMothersDay ?? false);
+        setPeople(data.people ?? []);
+        setChristmasOn(data.remindsChristmas ?? true);
+        setMothersDayOn(data.remindsMothersDay ?? true);
         setLoadState("ready");
       } catch (e) {
         if (cancelled) return;
@@ -89,6 +94,14 @@ function ReminderPage() {
     };
   }, [backendUrl, sessionToken]);
 
+  const updatePerson = (i: number, patch: Partial<Person>) =>
+    setPeople((prev) => prev.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
+
+  const removePerson = (i: number) =>
+    setPeople((prev) => prev.filter((_, idx) => idx !== i));
+
+  const addPerson = () => setPeople((prev) => [...prev, emptyPerson()]);
+
   const save = async () => {
     if (!backendUrl) {
       setSaveError("Extension not configured (missing backend URL).");
@@ -101,29 +114,33 @@ function ReminderPage() {
       setSaveState("error");
       return;
     }
+
+    const cleaned = people
+      .filter((p) => p.name.trim() && /^\d{4}-\d{2}-\d{2}$/.test(p.dateOfBirth))
+      .map((p) => ({
+        name: p.name.trim(),
+        dateOfBirth: p.dateOfBirth,
+        mumVariants: p.mumVariants,
+      }));
+
     setSaveState("saving");
     setSaveError(null);
     try {
       const token = await sessionToken.get();
-      const res = await fetch(
-        `${backendUrl}/api/public/shopify/reminders`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            email,
-            shopDomain: (settings.shop_domain as string) ?? "",
-            birthdays:
-              birthdayOn && birthday ? [{ date: birthday, mumVariants: [] }] : [],
-            remindsBirthday: birthdayOn,
-            remindsChristmas: christmasOn,
-            remindsMothersDay: mothersDayOn,
-          }),
+      const res = await fetch(`${backendUrl}/api/public/shopify/reminders`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-      );
+        body: JSON.stringify({
+          email,
+          shopDomain: (settings.shop_domain as string) ?? "",
+          people: cleaned,
+          remindsChristmas: christmasOn,
+          remindsMothersDay: mothersDayOn,
+        }),
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setSaveState("ok");
     } catch (e) {
@@ -151,26 +168,54 @@ function ReminderPage() {
         {loadState === "ready" && (
           <BlockStack spacing="base">
             <Text>
-              Set reminders for Mum's birthday, Christmas, and Mother's Day.
-              We'll email you in time to order.
+              Add each person you'd like a birthday reminder for. Then choose
+              whether you want Mother's Day and Christmas reminders too.
             </Text>
 
-            <TextField
-              label="Mum's birthday (YYYY-MM-DD)"
-              value={birthday}
-              onChange={setBirthday}
-              placeholder="1955-03-15"
-            />
+            {people.length === 0 && (
+              <Text>You haven't added anyone yet.</Text>
+            )}
+
+            {people.map((person, i) => (
+              <BlockStack key={person.id ?? i} spacing="tight">
+                <TextField
+                  label="Name"
+                  value={person.name}
+                  onChange={(v) => updatePerson(i, { name: v })}
+                />
+                <TextField
+                  label="Date of birth (YYYY-MM-DD)"
+                  value={person.dateOfBirth}
+                  onChange={(v) => updatePerson(i, { dateOfBirth: v })}
+                  placeholder="1955-03-15"
+                />
+                <Checkbox
+                  checked={person.remindsBirthday}
+                  onChange={(v) => updatePerson(i, { remindsBirthday: v })}
+                >
+                  Birthday reminder
+                </Checkbox>
+                <InlineStack>
+                  <Button kind="plain" onPress={() => removePerson(i)}>
+                    Remove
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            ))}
+
+            <InlineStack>
+              <Button kind="secondary" onPress={addPerson}>
+                + Add person
+              </Button>
+            </InlineStack>
 
             <BlockStack spacing="tight">
-              <Checkbox checked={birthdayOn} onChange={setBirthdayOn}>
-                Birthday reminder
+              <Text emphasis="bold">Account reminders</Text>
+              <Checkbox checked={mothersDayOn} onChange={setMothersDayOn}>
+                Mother's Day reminder
               </Checkbox>
               <Checkbox checked={christmasOn} onChange={setChristmasOn}>
                 Christmas reminder
-              </Checkbox>
-              <Checkbox checked={mothersDayOn} onChange={setMothersDayOn}>
-                Mother's Day reminder
               </Checkbox>
             </BlockStack>
 

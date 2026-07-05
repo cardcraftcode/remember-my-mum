@@ -19,6 +19,15 @@ export default reactExtension(
   () => <MumReminders />,
 );
 
+// Parse "DD/MM" or "DD/MM/YYYY" into ISO YYYY-MM-DD (year defaults to 2000
+// when the customer only gives us day and month).
+function toIso(input: string): string | null {
+  const trimmed = input.trim();
+  if (!/^\d{2}\/\d{2}(?:\/\d{4})?$/.test(trimmed)) return null;
+  const [dd, mm, yyyy] = trimmed.split("/");
+  return `${yyyy ?? "2000"}-${mm}-${dd}`;
+}
+
 function MumReminders() {
   const { i18n } = useApi();
   const settings = useSettings();
@@ -30,6 +39,7 @@ function MumReminders() {
     "",
   );
 
+  const [name, setName] = useState("");
   const [birthday, setBirthday] = useState("");
   const [birthdayOn, setBirthdayOn] = useState(true);
   const [christmasOn, setChristmasOn] = useState(true);
@@ -50,6 +60,14 @@ function MumReminders() {
       setStatus("error");
       return;
     }
+
+    const iso = birthday ? toIso(birthday) : null;
+    if (birthdayOn && (!name.trim() || !iso)) {
+      setError("Please enter a name and a birthday in DD/MM format.");
+      setStatus("error");
+      return;
+    }
+
     setStatus("saving");
     setError(null);
     try {
@@ -59,7 +77,10 @@ function MumReminders() {
         body: JSON.stringify({
           email,
           order_id: order?.id ?? null,
-          mum_birthday: birthday || null,
+          people:
+            birthdayOn && iso && name.trim()
+              ? [{ name: name.trim(), dateOfBirth: iso, mumVariants: [] }]
+              : [],
           reminders: {
             birthday: birthdayOn,
             christmas: christmasOn,
@@ -89,12 +110,19 @@ function MumReminders() {
         Never forget an occasion
       </Text>
       <Text>
-        Set reminders for Mum's birthday, Christmas, and Mother's Day. We'll
-        email you in time to order.
+        Set a birthday reminder plus Christmas and Mother's Day — we'll email
+        you in time to order a card.
       </Text>
 
       <TextField
-        label="Mum's birthday (DD/MM)"
+        label="Name"
+        value={name}
+        onChange={setName}
+        placeholder="Mum, Nana Rose, etc."
+      />
+
+      <TextField
+        label="Birthday (DD/MM)"
         value={birthday}
         onChange={setBirthday}
         placeholder="15/03"
@@ -119,12 +147,8 @@ function MumReminders() {
       )}
 
       <InlineStack>
-        <Button
-          kind="primary"
-          onPress={save}
-          loading={status === "saving"}
-        >
-          {i18n.translate ? "Save reminders" : "Save reminders"}
+        <Button kind="primary" onPress={save} loading={status === "saving"}>
+          {i18n.translate ? "Set reminders" : "Set reminders"}
         </Button>
       </InlineStack>
     </BlockStack>
