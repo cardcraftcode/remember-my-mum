@@ -4,6 +4,7 @@ import {
   InlineStack,
   Text,
   TextField,
+  Select,
   Checkbox,
   Button,
   Banner,
@@ -14,18 +15,35 @@ import {
 } from "@shopify/ui-extensions-react/checkout";
 import { useState } from "react";
 
+const MUM_VARIANTS = [
+  "Mom",
+  "Mommy",
+  "Stepmom",
+  "Mam",
+  "Mammy",
+  "Stepmam",
+  "Mum",
+  "Mummy",
+  "Stepmum",
+  "Ma",
+  "Mama",
+  "Amma",
+  "Ammi",
+  "Maw",
+  "Mother",
+];
+
 export default reactExtension(
   "purchase.thank-you.block.render",
   () => <MumReminders />,
 );
 
-// Parse "DD/MM" or "DD/MM/YYYY" into ISO YYYY-MM-DD (year defaults to 2000
-// when the customer only gives us day and month).
+// Parse "DD/MM/YYYY" into ISO YYYY-MM-DD.
 function toIso(input: string): string | null {
   const trimmed = input.trim();
-  if (!/^\d{2}\/\d{2}(?:\/\d{4})?$/.test(trimmed)) return null;
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) return null;
   const [dd, mm, yyyy] = trimmed.split("/");
-  return `${yyyy ?? "2000"}-${mm}-${dd}`;
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function MumReminders() {
@@ -40,6 +58,7 @@ function MumReminders() {
   );
 
   const [name, setName] = useState("");
+  const [variant, setVariant] = useState("Mum");
   const [birthday, setBirthday] = useState("");
   const [birthdayOn, setBirthdayOn] = useState(true);
   const [christmasOn, setChristmasOn] = useState(true);
@@ -61,9 +80,14 @@ function MumReminders() {
       return;
     }
 
-    const iso = birthday ? toIso(birthday) : null;
-    if (birthdayOn && (!name.trim() || !iso)) {
-      setError("Please enter a name and a birthday in DD/MM format.");
+    const iso = toIso(birthday);
+    if (!name.trim() || !iso) {
+      setError("Please enter a name and full date of birth in DD/MM/YYYY format.");
+      setStatus("error");
+      return;
+    }
+    if (!birthdayOn && !christmasOn && !mothersDayOn) {
+      setError("Please pick at least one reminder.");
       setStatus("error");
       return;
     }
@@ -77,15 +101,16 @@ function MumReminders() {
         body: JSON.stringify({
           email,
           order_id: order?.id ?? null,
-          people:
-            birthdayOn && iso && name.trim()
-              ? [{ name: name.trim(), dateOfBirth: iso, mumVariants: [] }]
-              : [],
-          reminders: {
-            birthday: birthdayOn,
-            christmas: christmasOn,
-            mothers_day: mothersDayOn,
-          },
+          people: [
+            {
+              name: name.trim(),
+              dateOfBirth: iso,
+              variant,
+              remindsBirthday: birthdayOn,
+              remindsChristmas: christmasOn,
+              remindsMothersDay: mothersDayOn,
+            },
+          ],
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -99,7 +124,7 @@ function MumReminders() {
   if (status === "ok") {
     return (
       <Banner status="success" title="Reminders saved">
-        We'll email you before each occasion.
+        Check your inbox to confirm — we'll email you before each occasion.
       </Banner>
     );
   }
@@ -110,35 +135,43 @@ function MumReminders() {
         Never forget an occasion
       </Text>
       <Text>
-        Set a birthday reminder plus Christmas and Mother's Day — we'll email
-        you in time to order a card.
+        Set birthday, Christmas and Mother's Day reminders — we'll email you in
+        time to order a card.
       </Text>
 
       <TextField
-        label="Name"
+        label="Who is the reminder for?"
         value={name}
         onChange={setName}
         placeholder="Mum, Nana Rose, etc."
       />
 
-      <TextField
-        label="Birthday (DD/MM)"
-        value={birthday}
-        onChange={setBirthday}
-        placeholder="15/03"
+      <Select
+        label="What is she known as?"
+        value={variant}
+        onChange={setVariant}
+        options={MUM_VARIANTS.map((v) => ({ label: v, value: v }))}
       />
 
       <BlockStack spacing="tight">
+        <Text emphasis="bold">Reminder about</Text>
         <Checkbox checked={birthdayOn} onChange={setBirthdayOn}>
-          Birthday reminder
+          Birthday
         </Checkbox>
         <Checkbox checked={christmasOn} onChange={setChristmasOn}>
-          Christmas reminder
+          Christmas
         </Checkbox>
         <Checkbox checked={mothersDayOn} onChange={setMothersDayOn}>
-          Mother's Day reminder
+          Mother's Day
         </Checkbox>
       </BlockStack>
+
+      <TextField
+        label="When was she born? (DD/MM/YYYY)"
+        value={birthday}
+        onChange={setBirthday}
+        placeholder="15/03/1955"
+      />
 
       {error && (
         <Banner status="critical" title="Couldn't save">

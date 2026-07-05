@@ -24,37 +24,33 @@ export const Route = createFileRoute('/reminders')({
 
 type PersonEntry = {
   name: string
+  variant: string
   dateOfBirth: string // YYYY-MM-DD
-  mumVariants: string[]
+  remindsBirthday: boolean
+  remindsChristmas: boolean
+  remindsMothersDay: boolean
 }
 
 function emptyPerson(): PersonEntry {
-  return { name: '', dateOfBirth: '', mumVariants: [] }
+  return {
+    name: '',
+    variant: 'Mum',
+    dateOfBirth: '',
+    remindsBirthday: true,
+    remindsChristmas: true,
+    remindsMothersDay: true,
+  }
 }
 
 function RemindersPage() {
   const [email, setEmail] = useState('')
   const [people, setPeople] = useState<PersonEntry[]>([emptyPerson()])
   const [expanded, setExpanded] = useState<boolean[]>([false])
-  const [remindsChristmas, setRemindsChristmas] = useState(true)
-  const [remindsMothersDay, setRemindsMothersDay] = useState(true)
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const updatePerson = (index: number, patch: Partial<PersonEntry>) => {
     setPeople((prev) => prev.map((p, i) => (i === index ? { ...p, ...patch } : p)))
-  }
-
-  const toggleVariant = (index: number, variant: string, checked: boolean) => {
-    setPeople((prev) =>
-      prev.map((p, i) => {
-        if (i !== index) return p
-        const set = new Set(p.mumVariants)
-        if (checked) set.add(variant)
-        else set.delete(variant)
-        return { ...p, mumVariants: Array.from(set) }
-      }),
-    )
   }
 
   const expandPerson = (index: number) => {
@@ -77,12 +73,25 @@ function RemindersPage() {
     setErrorMessage(null)
 
     const peoplePayload = people
-      .filter((p) => p.name.trim() && p.dateOfBirth)
+      .filter((p) => p.name.trim() && (p.remindsBirthday ? p.dateOfBirth : true))
       .map((p) => ({
         name: p.name.trim(),
-        dateOfBirth: p.dateOfBirth,
-        mumVariants: p.mumVariants,
+        variant: p.variant,
+        // DOB is required by the backend even if birthday reminder is off,
+        // because per-person Christmas / Mother's Day still key off the person.
+        // If the user turned birthday off and didn't enter DOB, default to
+        // a placeholder that keeps the row valid; we won't emit birthday events.
+        dateOfBirth: p.dateOfBirth || '2000-01-01',
+        remindsBirthday: p.remindsBirthday,
+        remindsChristmas: p.remindsChristmas,
+        remindsMothersDay: p.remindsMothersDay,
       }))
+
+    if (peoplePayload.length === 0) {
+      setStatus('error')
+      setErrorMessage('Please add at least one person.')
+      return
+    }
 
     try {
       const res = await fetch('/api/public/hooks/save-reminders', {
@@ -91,11 +100,6 @@ function RemindersPage() {
         body: JSON.stringify({
           email,
           people: peoplePayload,
-          reminders: {
-            birthday: peoplePayload.length > 0,
-            christmas: remindsChristmas,
-            mothers_day: remindsMothersDay,
-          },
           shop_domain: 'momcards.co.uk',
         }),
       })
@@ -165,9 +169,6 @@ function RemindersPage() {
                 expanded={expanded[index]}
                 onExpand={() => expandPerson(index)}
                 onChange={(patch) => updatePerson(index, patch)}
-                onToggleVariant={(variant, checked) =>
-                  toggleVariant(index, variant, checked)
-                }
                 onRemove={people.length > 1 ? () => removePerson(index) : undefined}
               />
             ))}
@@ -179,28 +180,6 @@ function RemindersPage() {
             >
               + Add another person
             </button>
-          </div>
-
-          <div className="space-y-3 border-t border-gray-100 pt-6">
-            <p className="text-sm font-medium text-gray-700">Account reminders</p>
-            <label className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                checked={remindsMothersDay}
-                onChange={(e) => setRemindsMothersDay(e.target.checked)}
-                className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-              />
-              <span className="text-gray-900">Remind me about Mother's Day</span>
-            </label>
-            <label className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                checked={remindsChristmas}
-                onChange={(e) => setRemindsChristmas(e.target.checked)}
-                className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-              />
-              <span className="text-gray-900">Remind me about Christmas</span>
-            </label>
           </div>
 
           {status === 'error' && errorMessage && (
@@ -231,7 +210,6 @@ function PersonCard({
   expanded,
   onExpand,
   onChange,
-  onToggleVariant,
   onRemove,
 }: {
   person: PersonEntry
@@ -239,7 +217,6 @@ function PersonCard({
   expanded: boolean
   onExpand: () => void
   onChange: (patch: Partial<PersonEntry>) => void
-  onToggleVariant: (variant: string, checked: boolean) => void
   onRemove?: () => void
 }) {
   if (!expanded) {
@@ -249,7 +226,7 @@ function PersonCard({
         onClick={onExpand}
         className="w-full rounded-lg border border-dashed border-pink-400 px-4 py-3 text-sm font-medium text-pink-600 hover:bg-pink-50"
       >
-        {index === 0 ? 'Set a birthday reminder' : `Person ${index + 1}`}
+        {index === 0 ? 'Set a reminder' : `Person ${index + 1}`}
       </button>
     )
   }
@@ -270,7 +247,9 @@ function PersonCard({
       </div>
 
       <div className="mt-3">
-        <label className="block text-sm font-medium text-gray-700">Name</label>
+        <label className="block text-sm font-medium text-gray-700">
+          Who is the reminder for?
+        </label>
         <input
           type="text"
           required
@@ -282,37 +261,72 @@ function PersonCard({
       </div>
 
       <div className="mt-3">
-        <label className="block text-sm font-medium text-gray-700">Date of birth</label>
-        <input
-          type="date"
-          required
-          value={person.dateOfBirth}
-          onChange={(e) => onChange({ dateOfBirth: e.target.value })}
-          className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-pink-500 focus:outline-none focus:ring-pink-500"
-        />
-        <p className="mt-1 text-xs text-gray-500">
-          We'll email you a week before the date.
-        </p>
+        <label className="block text-sm font-medium text-gray-700">
+          What is she known as?
+        </label>
+        <select
+          value={person.variant}
+          onChange={(e) => onChange({ variant: e.target.value })}
+          className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 shadow-sm focus:border-pink-500 focus:outline-none focus:ring-pink-500"
+        >
+          {MUM_VARIANTS.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="mt-4">
-        <p className="mb-2 text-sm font-medium text-gray-700">
-          Known as (select all that apply)
-        </p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {MUM_VARIANTS.map((variant) => (
-            <label key={variant} className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={person.mumVariants.includes(variant)}
-                onChange={(e) => onToggleVariant(variant, e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-              />
-              <span className="text-sm text-gray-900">{variant}</span>
-            </label>
-          ))}
+        <p className="mb-2 text-sm font-medium text-gray-700">Reminder about</p>
+        <div className="space-y-2">
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={person.remindsBirthday}
+              onChange={(e) => onChange({ remindsBirthday: e.target.checked })}
+              className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+            />
+            <span className="text-gray-900">Birthday</span>
+          </label>
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={person.remindsChristmas}
+              onChange={(e) => onChange({ remindsChristmas: e.target.checked })}
+              className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+            />
+            <span className="text-gray-900">Christmas</span>
+          </label>
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={person.remindsMothersDay}
+              onChange={(e) => onChange({ remindsMothersDay: e.target.checked })}
+              className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+            />
+            <span className="text-gray-900">Mother's Day</span>
+          </label>
         </div>
       </div>
+
+      {person.remindsBirthday && (
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700">
+            When was she born?
+          </label>
+          <input
+            type="date"
+            required
+            value={person.dateOfBirth}
+            onChange={(e) => onChange({ dateOfBirth: e.target.value })}
+            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-pink-500 focus:outline-none focus:ring-pink-500"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            We'll email you a week before the date.
+          </p>
+        </div>
+      )}
     </div>
   )
 }

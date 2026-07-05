@@ -1,37 +1,30 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
-import { createClient } from '@supabase/supabase-js'
-import type { Database } from '@/integrations/supabase/types'
-import { syncCustomerToKlaviyo, type CustomerRow, type PersonRow } from './reminders.server'
+import {
+  syncCustomerToKlaviyo,
+  emitCancelEventsForPerson,
+  getSupabaseAdmin,
+  type CustomerRow,
+  type PersonRow,
+} from './reminders.server'
 import { createKlaviyoClient } from './klaviyo.server'
 import { readSessionCookie } from './auth.server'
 import { MUM_VARIANTS } from './mum-variants'
 
-const supabaseUrl = process.env.SUPABASE_URL!
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-function getSupabaseAdmin() {
-  return createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
-    auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
-  })
-}
-
-const MumVariantSchema = z.enum([...MUM_VARIANTS] as [string, ...string[]])
+const VariantSchema = z.enum([...MUM_VARIANTS] as [string, ...string[]])
 
 const PersonInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
   dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  mumVariants: z.array(MumVariantSchema).default([]),
+  variant: VariantSchema,
   remindsBirthday: z.boolean().default(true),
+  remindsChristmas: z.boolean().default(true),
+  remindsMothersDay: z.boolean().default(true),
 })
 
 const CreatePersonSchema = PersonInputSchema
 const UpdatePersonSchema = PersonInputSchema.extend({ id: z.string().uuid() })
 const DeletePersonSchema = z.object({ id: z.string().uuid() })
-const AccountRemindersSchema = z.object({
-  remindsChristmas: z.boolean(),
-  remindsMothersDay: z.boolean(),
-})
 
 async function requireCustomer() {
   const session = await readSessionCookie()
@@ -86,8 +79,10 @@ export const createPerson = createServerFn({ method: 'POST' })
       customer_id: customer.id,
       name: data.name,
       date_of_birth: data.dateOfBirth,
-      mum_variants: data.mumVariants,
+      variant: data.variant,
       reminds_birthday: data.remindsBirthday,
+      reminds_christmas: data.remindsChristmas,
+      reminds_mothers_day: data.remindsMothersDay,
     })
     if (error) throw error
     const people = await syncAfterChange(supabaseAdmin, customer)
@@ -103,8 +98,10 @@ export const updatePerson = createServerFn({ method: 'POST' })
       .update({
         name: data.name,
         date_of_birth: data.dateOfBirth,
-        mum_variants: data.mumVariants,
+        variant: data.variant,
         reminds_birthday: data.remindsBirthday,
+        reminds_christmas: data.remindsChristmas,
+        reminds_mothers_day: data.remindsMothersDay,
       })
       .eq('id', data.id)
       .eq('customer_id', customer.id)
@@ -117,6 +114,17 @@ export const deletePerson = createServerFn({ method: 'POST' })
   .inputValidator((input: unknown) => DeletePersonSchema.parse(input))
   .handler(async ({ data }) => {
     const { supabaseAdmin, customer } = await requireCustomer()
+    // Emit Reminder Cancelled events for every active occasion before deleting.
+    const { data: person } = await supabaseAdmin
+      .from('reminder_people')
+      .select('*')
+      .eq('id', data.id)
+      .eq('customer_id', customer.id)
+      .maybeSingle()
+    if (person) {
+      const klaviyo = createKlaviyoClient(supabaseAdmin)
+      await emitCancelEventsForPerson({ supabaseAdmin, klaviyo, customer, person })
+    }
     const { error } = await supabaseAdmin
       .from('reminder_people')
       .delete()
@@ -125,22 +133,4 @@ export const deletePerson = createServerFn({ method: 'POST' })
     if (error) throw error
     const people = await syncAfterChange(supabaseAdmin, customer)
     return { customer, people }
-  })
-
-export const updateAccountReminders = createServerFn({ method: 'POST' })
-  .inputValidator((input: unknown) => AccountRemindersSchema.parse(input))
-  .handler(async ({ data }) => {
-    const { supabaseAdmin, customer } = await requireCustomer()
-    const { data: updated, error } = await supabaseAdmin
-      .from('reminder_customers')
-      .update({
-        reminds_christmas: data.remindsChristmas,
-        reminds_mothers_day: data.remindsMothersDay,
-      })
-      .eq('id', customer.id)
-      .select()
-      .single()
-    if (error || !updated) throw error ?? new Error('Update failed')
-    const people = await syncAfterChange(supabaseAdmin, updated)
-    return { customer: updated, people }
   })

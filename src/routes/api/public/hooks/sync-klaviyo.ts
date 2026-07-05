@@ -1,8 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { createClient } from '@supabase/supabase-js'
-import type { Database } from '@/integrations/supabase/types'
 import { createKlaviyoClient } from '@/lib/klaviyo.server'
-import { buildKlaviyoPayload, type PersonRow } from '@/lib/reminders.server'
+import {
+  buildKlaviyoPayload,
+  getSupabaseAdmin,
+  type PersonRow,
+} from '@/lib/reminders.server'
 
 // Daily cron: pushes the current profile snapshot for every customer to
 // Klaviyo. Auth: Supabase anon key in `apikey` header (pg_cron).
@@ -19,27 +21,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-klaviyo')({
           })
         }
 
-        const supabaseUrl = process.env.SUPABASE_URL
-        const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-        if (!supabaseUrl || !supabaseServiceRoleKey) {
-          return new Response(
-            JSON.stringify({ error: 'Missing Supabase credentials' }),
-            { status: 500, headers: { 'Content-Type': 'application/json' } },
-          )
-        }
-
-        const supabase = createClient<Database>(
-          supabaseUrl,
-          supabaseServiceRoleKey,
-          {
-            auth: {
-              storage: undefined,
-              persistSession: false,
-              autoRefreshToken: false,
-            },
-          },
-        )
-
+        const supabase = getSupabaseAdmin()
         const klaviyo = createKlaviyoClient(supabase)
 
         const { data: customers, error } = await supabase
@@ -47,10 +29,10 @@ export const Route = createFileRoute('/api/public/hooks/sync-klaviyo')({
           .select('*, reminder_people(*)')
 
         if (error) {
-          return new Response(
-            JSON.stringify({ error: error.message }),
-            { status: 500, headers: { 'Content-Type': 'application/json' } },
-          )
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          })
         }
 
         let synced = 0
@@ -65,10 +47,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-klaviyo')({
           try {
             let profile: { id: string }
             if (customer.klaviyo_profile_id) {
-              profile = await klaviyo.updateProfile(
-                customer.klaviyo_profile_id,
-                payload,
-              )
+              profile = await klaviyo.updateProfile(customer.klaviyo_profile_id, payload)
             } else {
               profile = await klaviyo.upsertProfile(payload)
               await supabase

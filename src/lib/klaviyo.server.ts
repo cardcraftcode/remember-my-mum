@@ -9,24 +9,11 @@ type KlaviyoProfile = {
   properties?: Record<string, unknown>
 }
 
-export type KlaviyoPersonEntry = {
-  name: string
-  dateOfBirth: string
-  next: string
-  mumVariants: string[]
-  remindsBirthday: boolean
-}
-
 export type KlaviyoProfilePayload = {
   email: string
-  firstName?: string
-  lastName?: string
   shopDomain?: string
   shopifyCustomerId?: string | null
-  people?: KlaviyoPersonEntry[]
   peopleCount?: number
-  remindsChristmas?: boolean
-  remindsMothersDay?: boolean
   consentTimestamp?: string | null
   remindersVerified?: boolean
   verificationUrl?: string | null
@@ -40,14 +27,7 @@ function buildAttributes(payload: Partial<KlaviyoProfilePayload>) {
   if (payload.shopifyCustomerId !== undefined) {
     properties.shopify_customer_id = payload.shopifyCustomerId
   }
-  if (payload.people !== undefined) properties.people = payload.people
   if (payload.peopleCount !== undefined) properties.people_count = payload.peopleCount
-  if (payload.remindsChristmas !== undefined) {
-    properties.reminds_christmas = payload.remindsChristmas
-  }
-  if (payload.remindsMothersDay !== undefined) {
-    properties.reminds_mothers_day = payload.remindsMothersDay
-  }
   if (payload.consentTimestamp) properties.consent_timestamp = payload.consentTimestamp
   if (payload.remindersVerified !== undefined) {
     properties.reminders_verified = payload.remindersVerified
@@ -58,8 +38,6 @@ function buildAttributes(payload: Partial<KlaviyoProfilePayload>) {
 
   const attributes: Record<string, unknown> = { properties }
   if (payload.email) attributes.email = payload.email
-  if (payload.firstName) attributes.first_name = payload.firstName
-  if (payload.lastName) attributes.last_name = payload.lastName
   return attributes
 }
 

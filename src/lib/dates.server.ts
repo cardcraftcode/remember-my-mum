@@ -24,7 +24,6 @@ export function nextBirthday(birthdayIso: string, from = new Date()): string {
  * This uses the Western Christian date for Easter.
  */
 export function ukMothersDay(year: number): Date {
-  // Gauss Easter computation for Western churches.
   const a = year % 19
   const b = Math.floor(year / 100)
   const c = year % 100
@@ -37,13 +36,41 @@ export function ukMothersDay(year: number): Date {
   const k = c % 4
   const l = (32 + 2 * e + 2 * i - h - k) % 7
   const m = Math.floor((a + 11 * h + 22 * l) / 451)
-  const month = Math.floor((h + l - 7 * m + 114) / 31) - 1 // 0-indexed
+  const month = Math.floor((h + l - 7 * m + 114) / 31) - 1
   const day = ((h + l - 7 * m + 114) % 31) + 1
 
   const easter = new Date(year, month, day)
-
-  // Mothering Sunday = 4th Sunday of Lent = Easter - 21 days
   return new Date(easter.getTime() - 21 * 24 * 60 * 60 * 1000)
+}
+
+export function nextChristmas(from = new Date()): string {
+  const today = startOfDay(from)
+  const y = today.getFullYear()
+  const candidate = new Date(y, 11, 25)
+  if (isBefore(candidate, today) || isEqual(candidate, today)) {
+    return format(new Date(y + 1, 11, 25), 'yyyy-MM-dd')
+  }
+  return format(candidate, 'yyyy-MM-dd')
+}
+
+export function nextMothersDay(from = new Date()): string {
+  const today = startOfDay(from)
+  const y = today.getFullYear()
+  const candidate = ukMothersDay(y)
+  if (isBefore(candidate, today) || isEqual(candidate, today)) {
+    return format(ukMothersDay(y + 1), 'yyyy-MM-dd')
+  }
+  return format(candidate, 'yyyy-MM-dd')
+}
+
+export function nextOccurrenceFor(
+  occasion: 'birthday' | 'christmas' | 'mothers_day',
+  dateOfBirth: string,
+  from = new Date(),
+): string {
+  if (occasion === 'birthday') return nextBirthday(dateOfBirth, from)
+  if (occasion === 'christmas') return nextChristmas(from)
+  return nextMothersDay(from)
 }
 
 export function formatDateIso(date: Date): string {
