@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { type SupabaseClient } from '@supabase/supabase-js'
 import type { Database, Json } from '@/integrations/supabase/types'
 
 const KLAVIYO_API_BASE = 'https://a.klaviyo.com/api'
@@ -9,10 +9,12 @@ type KlaviyoProfile = {
   properties?: Record<string, unknown>
 }
 
-export type KlaviyoBirthdayEntry = {
-  date: string
+export type KlaviyoPersonEntry = {
+  name: string
+  dateOfBirth: string
   next: string
   mumVariants: string[]
+  remindsBirthday: boolean
 }
 
 export type KlaviyoProfilePayload = {
@@ -21,22 +23,45 @@ export type KlaviyoProfilePayload = {
   lastName?: string
   shopDomain?: string
   shopifyCustomerId?: string | null
-  mumBirthday?: string | null
-  mumBirthdayNext?: string | null
-  birthdays?: KlaviyoBirthdayEntry[]
-  remindsBirthday?: boolean
+  people?: KlaviyoPersonEntry[]
+  peopleCount?: number
   remindsChristmas?: boolean
   remindsMothersDay?: boolean
   consentTimestamp?: string | null
-  // Double opt-in state. `remindersVerified` is the boolean used by Klaviyo
-  // flows to decide whether reminder sends are allowed. `verificationUrl` is
-  // populated only while the customer has not yet clicked the confirmation
-  // link; a Klaviyo flow triggered on this property sends the confirmation email.
   remindersVerified?: boolean
   verificationUrl?: string | null
 }
 
+function buildAttributes(payload: Partial<KlaviyoProfilePayload>) {
+  const properties: Record<string, unknown> = {
+    reminder_source: 'momcards_reminders',
+  }
+  if (payload.shopDomain) properties.shop_domain = payload.shopDomain
+  if (payload.shopifyCustomerId !== undefined) {
+    properties.shopify_customer_id = payload.shopifyCustomerId
+  }
+  if (payload.people !== undefined) properties.people = payload.people
+  if (payload.peopleCount !== undefined) properties.people_count = payload.peopleCount
+  if (payload.remindsChristmas !== undefined) {
+    properties.reminds_christmas = payload.remindsChristmas
+  }
+  if (payload.remindsMothersDay !== undefined) {
+    properties.reminds_mothers_day = payload.remindsMothersDay
+  }
+  if (payload.consentTimestamp) properties.consent_timestamp = payload.consentTimestamp
+  if (payload.remindersVerified !== undefined) {
+    properties.reminders_verified = payload.remindersVerified
+  }
+  if (payload.verificationUrl !== undefined) {
+    properties.verification_url = payload.verificationUrl
+  }
 
+  const attributes: Record<string, unknown> = { properties }
+  if (payload.email) attributes.email = payload.email
+  if (payload.firstName) attributes.first_name = payload.firstName
+  if (payload.lastName) attributes.last_name = payload.lastName
+  return attributes
+}
 
 export class KlaviyoClient {
   private apiKey: string
@@ -73,69 +98,13 @@ export class KlaviyoClient {
         `Klaviyo API error ${response.status}: ${JSON.stringify(body)}`,
       )
     }
-
     return body
   }
 
   async upsertProfile(payload: KlaviyoProfilePayload): Promise<KlaviyoProfile> {
-    const attributes: Record<string, unknown> = {
-      email: payload.email,
-      properties: {
-        reminder_source: 'momcards_reminders',
-      },
-    }
-
-    if (payload.firstName) attributes.first_name = payload.firstName
-    if (payload.lastName) attributes.last_name = payload.lastName
-    if (payload.shopDomain) {
-      ;(attributes.properties as Record<string, unknown>).shop_domain =
-        payload.shopDomain
-    }
-    if (payload.shopifyCustomerId) {
-      ;(attributes.properties as Record<string, unknown>).shopify_customer_id =
-        payload.shopifyCustomerId
-    }
-    if (payload.mumBirthday) {
-      ;(attributes.properties as Record<string, unknown>).mum_birthday =
-        payload.mumBirthday
-    }
-    if (payload.mumBirthdayNext) {
-      ;(attributes.properties as Record<string, unknown>).mum_birthday_next =
-        payload.mumBirthdayNext
-    }
-    ;(attributes.properties as Record<string, unknown>).reminds_birthday =
-      payload.remindsBirthday ?? false
-    ;(attributes.properties as Record<string, unknown>).reminds_christmas =
-      payload.remindsChristmas ?? false
-    ;(attributes.properties as Record<string, unknown>).reminds_mothers_day =
-      payload.remindsMothersDay ?? false
-    if (payload.consentTimestamp) {
-      ;(attributes.properties as Record<string, unknown>).consent_timestamp =
-        payload.consentTimestamp
-    }
-    if (payload.remindersVerified !== undefined) {
-      ;(attributes.properties as Record<string, unknown>).reminders_verified =
-        payload.remindersVerified
-    }
-    if (payload.verificationUrl !== undefined) {
-      ;(attributes.properties as Record<string, unknown>).verification_url =
-        payload.verificationUrl
-    }
-
-
-    if (payload.birthdays && payload.birthdays.length > 0) {
-      ;(attributes.properties as Record<string, unknown>).birthdays =
-        payload.birthdays
-    }
-
-
     const body = {
-      data: {
-        type: 'profile',
-        attributes,
-      },
+      data: { type: 'profile', attributes: buildAttributes(payload) },
     }
-
     const result = (await this.request('/profile-import/', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -145,7 +114,6 @@ export class KlaviyoClient {
         attributes?: { email: string; properties?: Record<string, unknown> }
       }
     }
-
     return {
       id: result.data?.id ?? '',
       email: result.data?.attributes?.email ?? payload.email,
@@ -157,64 +125,13 @@ export class KlaviyoClient {
     profileId: string,
     payload: Partial<KlaviyoProfilePayload>,
   ): Promise<KlaviyoProfile> {
-    const attributes: Record<string, unknown> = {
-      properties: {
-        reminder_source: 'momcards_reminders',
-      },
-    }
-
-    if (payload.firstName) attributes.first_name = payload.firstName
-    if (payload.lastName) attributes.last_name = payload.lastName
-    if (payload.shopDomain) {
-      ;(attributes.properties as Record<string, unknown>).shop_domain =
-        payload.shopDomain
-    }
-    if (payload.shopifyCustomerId !== undefined) {
-      ;(attributes.properties as Record<string, unknown>).shopify_customer_id =
-        payload.shopifyCustomerId
-    }
-    if (payload.mumBirthday) {
-      ;(attributes.properties as Record<string, unknown>).mum_birthday =
-        payload.mumBirthday
-    }
-    if (payload.mumBirthdayNext) {
-      ;(attributes.properties as Record<string, unknown>).mum_birthday_next =
-        payload.mumBirthdayNext
-    }
-    ;(attributes.properties as Record<string, unknown>).reminds_birthday =
-      payload.remindsBirthday ?? false
-    ;(attributes.properties as Record<string, unknown>).reminds_christmas =
-      payload.remindsChristmas ?? false
-    ;(attributes.properties as Record<string, unknown>).reminds_mothers_day =
-      payload.remindsMothersDay ?? false
-    if (payload.consentTimestamp) {
-      ;(attributes.properties as Record<string, unknown>).consent_timestamp =
-        payload.consentTimestamp
-    }
-    if (payload.remindersVerified !== undefined) {
-      ;(attributes.properties as Record<string, unknown>).reminders_verified =
-        payload.remindersVerified
-    }
-    if (payload.verificationUrl !== undefined) {
-      ;(attributes.properties as Record<string, unknown>).verification_url =
-        payload.verificationUrl
-    }
-
-
-    if (payload.birthdays && payload.birthdays.length > 0) {
-      ;(attributes.properties as Record<string, unknown>).birthdays =
-        payload.birthdays
-    }
-
-
     const body = {
       data: {
         type: 'profile',
         id: profileId,
-        attributes,
+        attributes: buildAttributes(payload),
       },
     }
-
     const result = (await this.request(`/profiles/${profileId}/`, {
       method: 'PATCH',
       body: JSON.stringify(body),
@@ -224,7 +141,6 @@ export class KlaviyoClient {
         attributes?: { email: string; properties?: Record<string, unknown> }
       }
     }
-
     return {
       id: result.data?.id ?? profileId,
       email: result.data?.attributes?.email ?? payload.email ?? '',
@@ -232,11 +148,6 @@ export class KlaviyoClient {
     }
   }
 
-  /**
-   * Sends a custom event to Klaviyo. Event-triggered flows are more reliable
-   * than profile-property-change triggers for transactional sends like
-   * confirmation emails.
-   */
   async trackEvent(args: {
     email: string
     metricName: string
@@ -250,21 +161,14 @@ export class KlaviyoClient {
           properties: args.properties ?? {},
           unique_id: args.uniqueId,
           metric: {
-            data: {
-              type: 'metric',
-              attributes: { name: args.metricName },
-            },
+            data: { type: 'metric', attributes: { name: args.metricName } },
           },
           profile: {
-            data: {
-              type: 'profile',
-              attributes: { email: args.email },
-            },
+            data: { type: 'profile', attributes: { email: args.email } },
           },
         },
       },
     }
-
     await this.request('/events/', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -290,9 +194,6 @@ export class KlaviyoClient {
 
 export function createKlaviyoClient(supabase: SupabaseClient<Database>) {
   const apiKey = process.env.KLAVIYO_PRIVATE_API_KEY
-  if (!apiKey) {
-    throw new Error('Missing KLAVIYO_PRIVATE_API_KEY')
-  }
+  if (!apiKey) throw new Error('Missing KLAVIYO_PRIVATE_API_KEY')
   return new KlaviyoClient(apiKey, supabase)
 }
-
