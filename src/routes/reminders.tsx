@@ -35,6 +35,7 @@ function emptyPerson(): PersonEntry {
 function RemindersPage() {
   const [email, setEmail] = useState('')
   const [people, setPeople] = useState<PersonEntry[]>([emptyPerson()])
+  const [expanded, setExpanded] = useState<boolean[]>([false])
   const [remindsChristmas, setRemindsChristmas] = useState(true)
   const [remindsMothersDay, setRemindsMothersDay] = useState(true)
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
@@ -56,9 +57,19 @@ function RemindersPage() {
     )
   }
 
-  const addPerson = () => setPeople((prev) => [...prev, emptyPerson()])
-  const removePerson = (index: number) =>
+  const expandPerson = (index: number) => {
+    setExpanded((prev) => prev.map((open, i) => (i === index ? true : open)))
+  }
+
+  const addPerson = () => {
+    setPeople((prev) => [...prev, emptyPerson()])
+    setExpanded((prev) => [...prev, true])
+  }
+
+  const removePerson = (index: number) => {
     setPeople((prev) => prev.filter((_, i) => i !== index))
+    setExpanded((prev) => prev.filter((_, i) => i !== index))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -151,6 +162,8 @@ function RemindersPage() {
                 key={index}
                 person={person}
                 index={index}
+                expanded={expanded[index]}
+                onExpand={() => expandPerson(index)}
                 onChange={(patch) => updatePerson(index, patch)}
                 onToggleVariant={(variant, checked) =>
                   toggleVariant(index, variant, checked)
@@ -215,16 +228,32 @@ function RemindersPage() {
 function PersonCard({
   person,
   index,
+  expanded,
+  onExpand,
   onChange,
   onToggleVariant,
   onRemove,
 }: {
   person: PersonEntry
   index: number
+  expanded: boolean
+  onExpand: () => void
   onChange: (patch: Partial<PersonEntry>) => void
   onToggleVariant: (variant: string, checked: boolean) => void
   onRemove?: () => void
 }) {
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={onExpand}
+        className="w-full rounded-lg border border-dashed border-pink-400 px-4 py-3 text-sm font-medium text-pink-600 hover:bg-pink-50"
+      >
+        {index === 0 ? 'Set a birthday reminder' : `Person ${index + 1}`}
+      </button>
+    )
+  }
+
   return (
     <div className="rounded-lg border border-gray-200 bg-pink-50/40 p-4">
       <div className="flex items-center justify-between">
