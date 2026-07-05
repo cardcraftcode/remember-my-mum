@@ -10,20 +10,20 @@ import { nextOccurrenceFor } from '@/lib/dates.server'
 
 /**
  * For each verified customer × person × active occasion, compute days-until
- * next_occurrence and emit `Reminder Due In 14 Days` / `Reminder Due In 7 Days`
+ * next_occurrence and emit `14-Day Reminder Due` / `7-Day Reminder Due`
  * when it hits the window. Idempotent via reminder_event_log.klaviyo_unique_id.
  *
  * Auth: Supabase publishable/anon key in `apikey` header.
  *
  * Testing:
  *   POST with body { "force": true } to bypass the day-window check and emit
- *   a `Reminder Due In 14 Days` for every verified active person/occasion,
+ *   a `14-Day Reminder Due` for every verified active person/occasion,
  *   using a timestamped unique_id so repeated runs still fire.
  */
 
 const WINDOWS: Array<{ days: number; metric: string; prefix: string; type: 'due_14' | 'due_7' }> = [
-  { days: 14, metric: 'Reminder Due In 14 Days', prefix: 'due14', type: 'due_14' },
-  { days: 7, metric: 'Reminder Due In 7 Days', prefix: 'due7', type: 'due_7' },
+  { days: 14, metric: '14-Day Reminder Due', prefix: 'due14', type: 'due_14' },
+  { days: 7, metric: '7-Day Reminder Due', prefix: 'due7', type: 'due_7' },
 ]
 
 function daysBetweenUtc(fromIso: string, toIso: string): number {
