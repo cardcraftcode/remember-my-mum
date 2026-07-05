@@ -4,11 +4,11 @@ import type { Database } from '@/integrations/supabase/types'
 import { createKlaviyoClient } from '@/lib/klaviyo.server'
 
 /**
- * Daily cron: for every enabled birthday reminder whose (month, day) matches
- * `today + leadDays`, fire a Klaviyo event carrying that birthday's own
- * `date` + `mumVariant`. Klaviyo flows triggered off this metric can render
- * `{{ event.mumVariant }}` and pick the correct variant per birthday, even
- * when the customer has multiple birthdays on their profile.
+ * Daily cron: for every person whose birthday matches `today + leadDays`
+ * (month + day), fire a `Birthday Reminder Due` Klaviyo event carrying the
+ * person's name, DOB, and mum-variant so flow templates can render
+ * `{{ event.personName }}` and `{{ event.mumVariant }}` correctly, even when
+ * a customer has more than one person set up.
  *
  * Auth: Supabase anon/publishable key in the `apikey` header (pg_cron).
  */
@@ -52,22 +52,18 @@ export const Route = createFileRoute('/api/public/hooks/send-birthday-events')({
 
         const klaviyo = createKlaviyoClient(supabase)
 
-        // Compute the target (month, day) in UTC.
         const target = new Date()
         target.setUTCDate(target.getUTCDate() + leadDays)
-        const targetMonth = target.getUTCMonth() + 1 // 1-12
-        const targetDay = target.getUTCDate() // 1-31
+        const targetMonth = target.getUTCMonth() + 1
+        const targetDay = target.getUTCDate()
         const currentYear = new Date().getUTCFullYear()
 
-        // Pull all enabled birthday reminders for verified customers.
         const { data: rows, error } = await supabase
-          .from('reminders')
+          .from('reminder_people')
           .select(
-            'id, event_date, mum_variants, customer:reminder_customers!inner(id, email, verified_at, shop_domain)',
+            'id, name, date_of_birth, mum_variants, reminds_birthday, customer:reminder_customers!inner(id, email, verified_at, shop_domain)',
           )
-          .eq('event_type', 'birthday')
-          .eq('enabled', true)
-          .not('event_date', 'is', null)
+          .eq('reminds_birthday', true)
 
         if (error) {
           return new Response(JSON.stringify({ error: error.message }), {
@@ -93,11 +89,7 @@ export const Route = createFileRoute('/api/public/hooks/send-birthday-events')({
             skipped++
             continue
           }
-          if (!row.event_date) {
-            skipped++
-            continue
-          }
-          const [, mm, dd] = row.event_date.split('-').map((n) => parseInt(n, 10))
+          const [, mm, dd] = row.date_of_birth.split('-').map((n) => parseInt(n, 10))
           if (mm !== targetMonth || dd !== targetDay) {
             skipped++
             continue
@@ -110,21 +102,22 @@ export const Route = createFileRoute('/api/public/hooks/send-birthday-events')({
             await klaviyo.trackEvent({
               email: customer.email,
               metricName: 'Birthday Reminder Due',
-              // One event per reminder per year — safe to re-run the cron.
               uniqueId: `birthday-${row.id}-${currentYear}`,
               properties: {
-                birthdayDate: row.event_date,
+                personName: row.name,
+                birthdayDate: row.date_of_birth,
                 mumVariant,
                 mumVariants: variants,
                 leadDays,
                 shopDomain: customer.shop_domain,
-                reminderId: row.id,
+                personId: row.id,
               },
             })
             await klaviyo.logSync(customer.id, 'track_birthday_event', 'success', {
-              reminderId: row.id,
+              personId: row.id,
+              personName: row.name,
               mumVariant,
-              birthdayDate: row.event_date,
+              birthdayDate: row.date_of_birth,
             })
             sent++
           } catch (err) {
@@ -132,7 +125,7 @@ export const Route = createFileRoute('/api/public/hooks/send-birthday-events')({
               customer.id,
               'track_birthday_event',
               'error',
-              { reminderId: row.id, birthdayDate: row.event_date },
+              { personId: row.id, birthdayDate: row.date_of_birth },
               err instanceof Error ? err.message : String(err),
             )
             failed++

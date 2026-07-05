@@ -1,42 +1,31 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { upsertCustomerAndReminders, type BirthdayEntry } from '@/lib/reminders.server'
+import { upsertCustomerAndPeople, type PersonInput } from '@/lib/reminders.server'
 import { MUM_VARIANTS, type MumVariant } from '@/lib/mum-variants'
-
-
-// Public endpoint called by the Shopify Checkout UI Extension on the
-// Thank You page. Called cross-origin from *.myshopify.com and the
-// shop's checkout domain, so it must set CORS headers.
-
 
 const MumVariantSchema = z.enum([...MUM_VARIANTS] as [string, ...string[]])
 
-const BirthdayEntrySchema = z.object({
-  mum_birthday: z.string().regex(/^\d{2}\/\d{2}(\/\d{4})?$/),
-  mum_variants: z.array(MumVariantSchema).default([]),
+const PersonSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  // Accept ISO YYYY-MM-DD from the account extension; or DD/MM / DD/MM/YYYY
+  // from the checkout extension.
+  dateOfBirth: z
+    .string()
+    .regex(/^(?:\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}(?:\/\d{4})?)$/),
+  mumVariants: z.array(MumVariantSchema).default([]),
 })
 
 const bodySchema = z.object({
   email: z.string().email(),
   order_id: z.union([z.string(), z.number(), z.null()]).optional(),
-  // New multi-birthday shape:
-  birthdays: z.array(BirthdayEntrySchema).optional(),
-  // Legacy single-birthday shape (kept for older callers). If `birthdays`
-  // is present it wins.
-  mum_birthday: z
-    .string()
-    .regex(/^\d{2}\/\d{2}(\/\d{4})?$/)
-    .nullable()
-    .optional(),
+  people: z.array(PersonSchema).optional(),
   reminders: z.object({
     birthday: z.boolean(),
     christmas: z.boolean(),
     mothers_day: z.boolean(),
   }),
   shop_domain: z.string().optional(),
-  mum_variants: z.array(MumVariantSchema).optional(),
 })
-
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -52,9 +41,10 @@ function json(status: number, body: unknown) {
   })
 }
 
-// Convert "DD/MM" or "DD/MM/YYYY" to ISO "YYYY-MM-DD". Year defaults to 2000.
-function parseBirthday(input: string | null | undefined): string | null {
-  if (!input) return null
+// Normalise DD/MM or DD/MM/YYYY into ISO YYYY-MM-DD. Year defaults to 2000
+// when omitted, matching prior behaviour for checkout submissions.
+function toIsoDate(input: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(input)) return input
   const parts = input.split('/')
   const dd = parts[0].padStart(2, '0')
   const mm = parts[1].padStart(2, '0')
@@ -79,46 +69,26 @@ export const Route = createFileRoute('/api/public/hooks/save-reminders')({
           return json(400, { error: 'Invalid body', issues: parsed.error.issues })
         }
 
-        const { email, birthdays, mum_birthday, reminders, shop_domain, mum_variants } =
-          parsed.data
+        const { email, people, reminders, shop_domain } = parsed.data
 
-        // Only pass `birthdays` when birthday reminders are enabled.
-        // Prefer the multi-birthday array; fall back to the single legacy field.
-        let birthdayInput: BirthdayEntry[] | undefined
-        if (reminders.birthday) {
-          if (birthdays && birthdays.length > 0) {
-            birthdayInput = birthdays
-              .map((b) => ({
-                date: parseBirthday(b.mum_birthday)!,
-                mumVariants: b.mum_variants as MumVariant[],
-              }))
-              .filter((b) => !!b.date)
-          } else if (mum_birthday) {
-            const parsedDate = parseBirthday(mum_birthday)
-            if (parsedDate) {
-              birthdayInput = [
-                { date: parsedDate, mumVariants: (mum_variants ?? []) as MumVariant[] },
-              ]
-            } else {
-              birthdayInput = []
-            }
-          } else {
-            birthdayInput = []
-          }
-        } else {
-          birthdayInput = []
-        }
+        const peopleInput: PersonInput[] = reminders.birthday && people
+          ? people.map((p) => ({
+              name: p.name,
+              dateOfBirth: toIsoDate(p.dateOfBirth),
+              mumVariants: p.mumVariants as MumVariant[],
+              remindsBirthday: true,
+            }))
+          : []
 
         try {
-          const result = await upsertCustomerAndReminders({
+          const result = await upsertCustomerAndPeople({
             email,
             shopDomain: shop_domain ?? 'shopify-checkout',
-            birthdays: birthdayInput,
+            people: peopleInput,
             remindsChristmas: reminders.christmas,
             remindsMothersDay: reminders.mothers_day,
             appBaseUrl: new URL(request.url).origin,
           })
-
           return json(200, { ok: true, customer_id: result.customer.id })
         } catch (err) {
           console.error('save-reminders failed', err)

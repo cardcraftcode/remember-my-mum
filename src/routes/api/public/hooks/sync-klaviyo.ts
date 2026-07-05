@@ -2,10 +2,9 @@ import { createFileRoute } from '@tanstack/react-router'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/integrations/supabase/types'
 import { createKlaviyoClient } from '@/lib/klaviyo.server'
-import { buildKlaviyoPayload } from '@/lib/reminders.server'
+import { buildKlaviyoPayload, type PersonRow } from '@/lib/reminders.server'
 
-// Daily cron: recomputes mum_birthday_next for every customer with an
-// enabled birthday reminder and pushes the current profile snapshot to
+// Daily cron: pushes the current profile snapshot for every customer to
 // Klaviyo. Auth: Supabase anon key in `apikey` header (pg_cron).
 export const Route = createFileRoute('/api/public/hooks/sync-klaviyo')({
   server: {
@@ -45,7 +44,7 @@ export const Route = createFileRoute('/api/public/hooks/sync-klaviyo')({
 
         const { data: customers, error } = await supabase
           .from('reminder_customers')
-          .select('*, reminders(*)')
+          .select('*, reminder_people(*)')
 
         if (error) {
           return new Response(
@@ -58,10 +57,10 @@ export const Route = createFileRoute('/api/public/hooks/sync-klaviyo')({
         let failed = 0
 
         for (const row of customers ?? []) {
-          const { reminders, ...customer } = row as typeof row & {
-            reminders: Database['public']['Tables']['reminders']['Row'][]
+          const { reminder_people: people, ...customer } = row as typeof row & {
+            reminder_people: PersonRow[]
           }
-          const payload = buildKlaviyoPayload(customer, reminders ?? [])
+          const payload = buildKlaviyoPayload(customer, people ?? [])
 
           try {
             let profile: { id: string }
